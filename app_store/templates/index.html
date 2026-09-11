@@ -90,12 +90,13 @@ label{display:block;color:var(--mut);font-size:11px;margin:8px 0 3px}
 #tinfo{font-size:14px;font-weight:600;margin-bottom:4px}
 #tstage{font-size:12.5px;color:var(--acc);margin:4px 0}
 #tmeta{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-bottom:4px}
-#tmeta .tchip{background:var(--chip-bg);border-radius:12px;padding:2px 10px;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;border:1px solid transparent;transition:box-shadow .15s,border-color .15s}
-#tmeta .tchip:hover{border-color:var(--acc)}
-#tmeta .tchip.ok{background:var(--tint-ok);color:var(--ok)}
-#tmeta .tchip.err{background:var(--tint-err);color:var(--err)}
-#tmeta .tchip.run{background:var(--tint-blue);color:var(--pending-txt)}
-#tmeta .tchip.sel{box-shadow:0 0 0 2px var(--acc);border-color:var(--acc)}
+#tmeta .tlabel{color:var(--mut);align-self:center;margin-right:2px}
+#tmeta .platform-chip{background:var(--chip-bg);border-radius:12px;padding:2px 10px;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;border:1px solid transparent;transition:box-shadow .15s,border-color .15s}
+#tmeta .platform-chip:hover{border-color:var(--acc)}
+#tmeta .platform-chip.ok{background:var(--tint-ok);color:var(--ok)}
+#tmeta .platform-chip.err{background:var(--tint-err);color:var(--err)}
+#tmeta .platform-chip.run{background:var(--tint-blue);color:var(--pending-txt)}
+#tmeta .platform-chip.sel{box-shadow:0 0 0 2px var(--acc);border-color:var(--acc)}
 .overlay{position:fixed;inset:0;background:var(--ov-bg);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:60}
 .modal{background:var(--panel);border:1px solid var(--modal-border);border-radius:14px;padding:18px;min-width:380px;max-width:90vw;max-height:70vh;overflow-y:auto;box-shadow:var(--modal-shadow)}
 .file-item{padding:8px 6px;border-bottom:1px dashed var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:12px;font-size:12.5px}
@@ -213,8 +214,8 @@ var doneMap={},errMap={};(t.results||[]).forEach(function(v){doneMap[v.platform]
 (t.errors||[]).forEach(function(v){errMap[v.platform]=v});
 var pst=t.pstate||{},sel=ST.TSEL;
 var targets=(t.platform||"").split(",").map(function(s){return s.trim()}).filter(Boolean);
-$("tmeta").innerHTML=targets.map(function(p){
-  var cls="tchip",mark="";
+$("tmeta").innerHTML=(targets.length?'<span class="tlabel">发布平台</span>':"")+targets.map(function(p){
+  var cls="platform-chip",mark="";
   if(doneMap[p]){cls+=doneMap[p].ok?" ok":" err";mark=doneMap[p].ok?" ✓":" ✗"}
   else if(errMap[p]){cls+=" err";mark=" ✗"}
   else if(pst[p]==="running"){cls+=" run";mark=" ⚡"}
