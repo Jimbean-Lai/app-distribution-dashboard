@@ -135,7 +135,7 @@ class XiaomiAdapter(StoreAdapter):
 
         synchro_type = int(release.metadata.get("synchroType", 1)) if release.metadata else 1
         app_detail: Dict[str, Any] = release.metadata.get("appDetail", {}) if release.metadata else {}
-        app_detail.setdefault("appName", release.title or release.package_name)
+        app_detail.setdefault("appName", (release.metadata or {}).get("store_name_cn") or release.title or release.package_name)
         app_detail.setdefault("packageName", release.package_name)
         app_detail.setdefault("versionName", release.version_name or "")
         if release.release_notes:

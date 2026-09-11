@@ -225,7 +225,7 @@ class HonorAdapter(StoreAdapter):
         else:
             lang_list = [{
                 "languageId": "zh-CN",
-                "appName": release.title or pkg,
+                "appName": (release.metadata or {}).get("store_name_cn") or release.title or pkg,
                 "intro": "",
                 "briefIntro": "",
                 "newFeature": release.release_notes or "",

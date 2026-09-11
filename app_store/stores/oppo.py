@@ -167,7 +167,7 @@ class OPPOAdapter(StoreAdapter):
             "version_code": str(release.version_code or meta.get("version_code") or existing.get("version_code", "")),
             "version_name": release.version_name or meta.get("version_name") or existing.get("version_name", ""),
             "apk_url": json.dumps([{"url": apk_url, "md5": md5, "cpu_code": meta.get("cpu_code", 0)}], ensure_ascii=False),
-            "app_name": release.title or meta.get("appName") or existing.get("app_name", release.package_name),
+            "app_name": meta.get("store_name_cn") or release.title or meta.get("appName") or existing.get("app_name", release.package_name),
             "second_category_id": meta.get("second_category_id") or existing.get("second_category_id", 0),
             "third_category_id": meta.get("third_category_id") or existing.get("third_category_id", 0),
             "summary": meta.get("summary") or existing.get("summary", ""),

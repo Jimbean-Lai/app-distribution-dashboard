@@ -125,13 +125,14 @@ class AppCatalog:
             release_notes=notes,
             track=t,
             title=app.get("name") or "",
-            metadata={"app_id": app_id, "category": app.get("category", ""), "online_time": online_time},
+            metadata={"app_id": app_id, "category": app.get("category", ""), "online_time": online_time,
+                      "store_name_cn": app.get("store_name_cn") or ""},
         )
 
     # ---- 更新 ----
     def update_app(self, app_id: str, fields: Dict[str, Any]) -> Dict[str, Any]:
         """更新目录中的应用字段（如 aab_build/apk_build/package_name/version_name），写回 JSON。"""
-        allowed = {"package_name", "aab_build", "apk_build", "latest_build", "version_name", "version_code", "track", "notes", "name", "online_time", "icon"}
+        allowed = {"package_name", "aab_build", "apk_build", "latest_build", "version_name", "version_code", "track", "notes", "name", "online_time", "icon", "store_name_cn"}
         unknown = set(fields) - allowed
         if unknown:
             raise StoreError(f"不支持的字段: {', '.join(sorted(unknown))}")
