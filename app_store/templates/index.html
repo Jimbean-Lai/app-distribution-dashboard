@@ -225,10 +225,18 @@ if(t.status==="done"){$("tstage").textContent="✅ 全部完成"}
 else if(t.status==="error"){$("tstage").textContent="❌ 有错误"}
 else if(sel){var st2=pst[sel];$("tstage").textContent=st2==="done"?"✅ "+sel+" 完成":st2==="error"?"❌ "+sel+" 失败":"⚡ "+sel+" 发布中"}
 else{$("tstage").textContent=t.stage||"处理中…"}
-// === 上传字节进度：跟随选中平台（未选中时兼容旧任务单一 upload 字段）===
-var upEl=$("tup");if(upEl){var up=null;
-if(sel&&t.uploads&&t.uploads[sel])up=t.uploads[sel];else if(!sel&&t.upload)up=t.upload;
-if(up&&up.sent!=null){var mb1=(up.sent/1048576).toFixed(1),mb2=(up.total/1048576).toFixed(1);upEl.textContent="⬆ 上传中 "+mb1+"MB / "+mb2+"MB ("+up.pct+")"}else if(t.status==="done"||t.status==="error"){upEl.textContent="";}}
+// === 上传字节进度：选中平台显示其上传；未选中自动跟随正在活跃上传的平台（并行时取进度最低者，带平台名前缀）===
+var upEl=$("tup");if(upEl){var up=null,label="";
+if(sel){if(t.uploads&&t.uploads[sel]){up=t.uploads[sel];label=sel+" "}}
+else{var ups=t.uploads||{},best=null,bp="";
+for(var p in ups){var u=ups[p];if(u&&u.sent!=null&&u.total&&u.sent<u.total){if(!best||u.sent/u.total<best.sent/best.total){best=u;bp=p}}}
+if(best){up=best;label=bp+" "}
+else if(t.upload){up=t.upload}}
+if(up&&up.sent!=null&&t.status!=="done"&&t.status!=="error"){
+var mb1=(up.sent/1048576).toFixed(1),mb2=(up.total/1048576).toFixed(1);
+if(up.total&&up.sent>=up.total){upEl.textContent="✓ "+label+"上传完成 "+mb2+"MB"}
+else{upEl.textContent="⬆ "+label+"上传中 "+mb1+"MB / "+mb2+"MB ("+up.pct+")"}}
+else{upEl.textContent=""}}
 // === 步骤列表：选中平台显示其专属步骤，否则显示合并日志；✓已完成/⚡当前/✗失败 ===
 var sl=(sel&&t.psteps&&t.psteps[sel])?t.psteps[sel]:(t.steps||[]);
 var se=$("tsteps");var li=sl.length-1;
@@ -238,7 +246,7 @@ se.innerHTML=sl.map(function(s,i){var icon,cls;
   else{icon=i<li?"✓":"✗";cls=i<li?"ok":"err";}
   return '<div><span class="icn '+cls+'">'+icon+'</span>'+esc(s)+"</div>"
 }).join("");se.scrollTop=se.scrollHeight}
-function startPoll(tid){ST.POLL=tid;ST.TSEL="";ST.LASTT=null;$("progress").classList.remove("hide");$("tsteps").innerHTML="";poll()}
+function startPoll(tid){ST.POLL=tid;ST.TSEL="";ST.LASTT=null;$("progress").classList.remove("hide");$("tsteps").innerHTML="";$("tup").textContent="";poll()}
 function selTPlat(p){ST.TSEL=(ST.TSEL===p?"":p);if(ST.LASTT)renderTask(ST.LASTT)}
 function poll(){if(!ST.POLL)return;api("/api/tasks/"+ST.POLL).then(function(t){if(t.error){lg("查询失败","err");stopPoll();return}
 renderTask(t)
@@ -251,7 +259,7 @@ lg("== "+(isOk?"✔ 发布成功":"✘ 发布有错误")+" ==",isOk?"ok":"err");
 // 任务结束：刷新发布历史显示（后端已落盘，此处重新拉取展示）
 api("/api/tasks").then(function(tr){if(tr&&tr.history)renderHistory(tr.history.slice(0,8))});
 busy(false)}
-else{$("tclose").style.display="none";setTimeout(poll,600)}})}
+else{$("tclose").style.display="none";setTimeout(poll,600)}}).catch(function(){setTimeout(poll,1500)})}
 function stopPoll(){ST.POLL=null;$("tclose").style.display="none";$("progress").classList.add("hide")}
 function ds(){var a=ST.cur;if(!a||!a.package_name){toast("请选择应用","err");return}
 lg("== 查询状态 "+a.name+" ==");busy(true);var _sb=$("shareBtn");if(_sb)_sb.classList.add("hide");$("sg").innerHTML="<div class=muted>查询中…</div>";api("/api/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({app_id:a.id,platform:selPlats()||"all"})}).then(function(r){renderStatusGrid(r.statuses||[]);busy(false)}).catch(function(){ $("sg").innerHTML='<div class=muted>查询失败</div>';busy(false)})}
