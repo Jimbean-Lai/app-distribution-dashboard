@@ -171,6 +171,18 @@ class GoogleAdapter(StoreAdapter):
         release_notes = release.whatsnew or release.release_notes or ""
 
         try:
+            if dry_run:
+                # dry-run 只做轻量校验：本地前置检查已过 + 凭证能创建 edit（对该应用有权限）。
+                # 不真实上传安装包——edit 立即删除，零字节传输（原实现先整包上传再删 edit）。
+                service.edits().delete(packageName=package, editId=edit_id).execute()
+                return SubmitResult(
+                    platform=self.platform,
+                    ok=True,
+                    message=f"dry-run 校验通过（{path.name}，未上传）",
+                    remote_reference=edit_id,
+                    state=AuditState.DRAFT,
+                    raw={"edit_id": edit_id, "artifact": str(path)},
+                )
             is_aab = path.suffix.lower() == ".aab"
             mime = "application/octet-stream" if is_aab else "application/vnd.android.package-archive"
             pc = (release.metadata or {}).get("_progress_cb")
@@ -220,7 +232,7 @@ class GoogleAdapter(StoreAdapter):
             version_code = uploaded.get("versionCode") or release.version_code
 
             # 大 AAB 上传后需等待 processing 完成
-            if is_aab and not dry_run:
+            if is_aab:
                 if scb:
                     scb("等待 Google 处理（processing）…")
                 self._wait_processing(service, package, edit_id, version_code)
@@ -235,7 +247,7 @@ class GoogleAdapter(StoreAdapter):
                     {
                         "name": f"{version_code} ({release.version_name})" if release.version_name else str(version_code),
                         "versionCodes": [str(version_code)],
-                        "status": "draft" if (dry_run or not auto_review) else "completed",
+                        "status": "draft" if not auto_review else "completed",
                         "releaseNotes": (
                             [{"language": "zh-CN", "text": release_notes}] if release_notes else []
                         ),
@@ -245,17 +257,6 @@ class GoogleAdapter(StoreAdapter):
             service.edits().tracks().update(
                 packageName=package, editId=edit_id, track=release.track, body=track_body
             ).execute()
-
-            if dry_run:
-                service.edits().delete(packageName=package, editId=edit_id).execute()
-                return SubmitResult(
-                    platform=self.platform,
-                    ok=True,
-                    message=f"dry-run 校验通过（{path.name}）",
-                    remote_reference=edit_id,
-                    state=AuditState.DRAFT,
-                    raw={"edit_id": edit_id, "version_code": version_code, "artifact": str(path)},
-                )
 
             if auto_review:
                 service.edits().commit(packageName=package, editId=edit_id).execute()
