@@ -1,7 +1,7 @@
 # App 多平台发布看板（App Multi-Platform Release Dashboard）
 
-[![GitHub stars](https://img.shields.io/github/stars/Jimbean-Lai/app-multi-platform-release-dashboard?style=social)](https://github.com/Jimbean-Lai/app-multi-platform-release-dashboard/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/Jimbean-Lai/app-multi-platform-release-dashboard?style=social)](https://github.com/Jimbean-Lai/app-multi-platform-release-dashboard/network)
+[![GitHub stars](https://img.shields.io/github/stars/Jimbean-Lai/app-distribution-dashboard?style=social)](https://github.com/Jimbean-Lai/app-distribution-dashboard/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/Jimbean-Lai/app-distribution-dashboard?style=social)](https://github.com/Jimbean-Lai/app-distribution-dashboard/network)
 
 > ⭐ 如果这个项目对你有帮助，可以顺手点个**Star**，非常感谢！🫶
 
