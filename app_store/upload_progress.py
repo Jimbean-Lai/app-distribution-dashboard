@@ -37,7 +37,12 @@ class ProgressFile:
         return data
 
     def seek(self, offset: int, whence: int = 0) -> int:
-        return self._f.seek(offset, whence)
+        # requests 重试/重定向时会 seek 回退重传，需按目标偏移复位已发送计数
+        pos = self._f.seek(offset, whence)
+        self._sent = pos
+        # 强制下一次 read 触发一次回调，保证进度显示不跳过回退点
+        self._last = pos // self._report - 1
+        return pos
 
     def tell(self) -> int:
         return self._f.tell()

@@ -13,8 +13,8 @@
 # 启动看板
 appstore web --port 8090 --credentials config/credentials.json --catalog apps/catalog.json
 
-# 发布（多选平台）
-appstore publish --app example-app --platform xiaomi,oppo --credentials config/credentials.json
+# 发布（--platform 每次只接受一个平台；多平台需逐平台执行，或用 --all）
+appstore publish --app example-app --platform xiaomi --credentials config/credentials.json
 
 # 查询
 appstore status --app example-app --credentials config/credentials.json

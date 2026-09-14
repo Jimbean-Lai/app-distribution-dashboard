@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import json
 import os
+import stat
+import sys
 from pathlib import Path
 from typing import Any, Dict
 
@@ -22,6 +24,13 @@ def _read_json(path: str) -> Any:
 
 def load_credentials(path: str) -> Dict[str, Any]:
     """读取形如 {"google": {...}, "huawei": {...}} 的凭证文件。"""
+    p = Path(path).expanduser()
+    try:
+        mode = p.stat().st_mode
+        if mode & (stat.S_IRWXG | stat.S_IRWXO):
+            print(f"警告: 凭证文件 {p} 可被 group/other 访问，建议 chmod 600", file=sys.stderr)
+    except OSError:
+        pass  # 无法获取权限信息时跳过（如部分 Windows 环境）
     data = _read_json(path)
     if not isinstance(data, dict):
         raise StoreError("凭证文件必须是 JSON 对象: {平台名: 凭证字段...}")
@@ -33,17 +42,25 @@ def load_release(path: str) -> Release:
     p = Path(path).expanduser()
     suffix = p.suffix.lower()
     if suffix in (".yaml", ".yml"):
+        if not p.is_file():
+            raise StoreError(f"文件不存在: {p}")
         try:
             import yaml
         except ImportError:
             raise StoreError("读取 YAML 需安装 PyYAML: pip install pyyaml")
-        data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        try:
+            data = yaml.safe_load(p.read_text(encoding="utf-8"))
+        except yaml.YAMLError as e:
+            raise StoreError(f"YAML 解析失败 ({p}): {e}")
     else:
         data = _read_json(path)
     if not isinstance(data, dict):
         raise StoreError("release 清单必须是 JSON/YAML 对象")
 
     known = set(Release.__dataclass_fields__)
+    unknown = [str(k) for k in data if k not in known]
+    if unknown:
+        print(f"警告: release 清单包含未知字段，已忽略: {', '.join(unknown)}", file=sys.stderr)
     payload = {k: v for k, v in data.items() if k in known}
     try:
         release = Release(**payload)

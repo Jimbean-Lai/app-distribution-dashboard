@@ -25,11 +25,8 @@ def extract_version(html: str) -> str:
             if re.fullmatch(r"\d+\.\d+\.\d+", ver):
                 seen.append(ver)
         i += 4
-    # 过滤明显非应用版本（1.x/2.x/0.x 库版本），返回第一个像样的
-    for v in seen:
-        if not v.startswith(("1.", "2.", "0.")):
-            return v
-    # 退而求其次返回第一个（或为空）
+    # 不过滤主版本号：真实应用版本完全可能是 1.x/0.x，按前缀过滤会误杀，
+    # 直接返回第一个匹配项（页面结构中应用版本通常最先出现）
     return seen[0] if seen else ""
 
 
@@ -45,7 +42,9 @@ def main() -> None:
             headers={"User-Agent": UA}, timeout=15,
         )
         print(extract_version(r.text))
-    except Exception:
+    except Exception as e:
+        # 失败原因输出到 stderr，stdout 保持为空（调用方按空串判断未取到版本）
+        print(f"版本探测失败: {e}", file=sys.stderr)
         print("")
 
 

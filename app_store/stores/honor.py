@@ -22,8 +22,10 @@ import datetime
 import hashlib
 import json
 import os
+import sys
+import threading
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..base import StoreAdapter, StoreError
 from ..models import AuditState, Platform, Release, SubmitResult, StoreStatus, utcnow_iso
@@ -60,6 +62,9 @@ class HonorAdapter(StoreAdapter):
         self._apps = self.credentials.get("apps") or {}
         self._cid = self.credentials.get("client_id") or ""
         self._csecret = self.credentials.get("client_secret") or ""
+        # token 缓存：client_id -> (token, 过期时间戳)，加锁保护并发
+        self._tokens: Dict[str, Tuple[str, float]] = {}
+        self._token_lock = threading.Lock()
 
     def check(self) -> List[str]:
         try:
@@ -77,25 +82,49 @@ class HonorAdapter(StoreAdapter):
         return self._cid, self._csecret
 
     def _token(self, pkg: str) -> str:
+        """获取 token（按 client_id 缓存，按 expires_in 过期，提前 5 分钟刷新）。"""
         import requests as req
         cid, sec = self._cred_for(pkg)
-        resp = req.post(_IAM_URL, data={
-            "grant_type": "client_credentials",
-            "client_id": cid,
-            "client_secret": sec,
-        }, timeout=30)
-        d = resp.json()
+        with self._token_lock:
+            cached = self._tokens.get(cid)
+            if cached and time.time() < cached[1]:
+                return cached[0]
+        # 锁外请求，避免长时间持锁；并发下可能重复请求 token，无副作用
+        try:
+            resp = req.post(_IAM_URL, data={
+                "grant_type": "client_credentials",
+                "client_id": cid,
+                "client_secret": sec,
+            }, timeout=30)
+        except (req.ConnectionError, req.Timeout) as e:
+            raise StoreError(f"荣耀获取 token 网络错误: {e}")
+        try:
+            d = resp.json()
+        except Exception:
+            raise StoreError(f"荣耀获取 token 非JSON (HTTP {resp.status_code}): {resp.text[:300]}")
         tok = d.get("access_token")
         if not tok:
             raise StoreError(f"荣耀获取 token 失败: {d}")
+        try:
+            ttl = int(d.get("expires_in") or 3600)
+        except (TypeError, ValueError):
+            ttl = 3600
+        with self._token_lock:
+            self._tokens[cid] = (tok, time.time() + max(ttl - 300, 60))
         return tok
 
     def _get(self, pkg: str, path: str, params: Dict[str, Any]) -> Dict[str, Any]:
         import requests as req
         tok = self._token(pkg)
         url = _OPENAPI + path
-        resp = req.get(url, params=params, headers={"Authorization": f"Bearer {tok}"}, timeout=60)
-        d = resp.json()
+        try:
+            resp = req.get(url, params=params, headers={"Authorization": f"Bearer {tok}"}, timeout=60)
+        except (req.ConnectionError, req.Timeout) as e:
+            raise StoreError(f"荣耀 {path} 网络错误: {e}")
+        try:
+            d = resp.json()
+        except Exception:
+            raise StoreError(f"荣耀 {path} 非JSON (HTTP {resp.status_code}): {resp.text[:300]}")
         if d.get("code") != 0:
             raise StoreError(f"荣耀 {path}: {d.get('msg', d)}")
         return d
@@ -105,9 +134,15 @@ class HonorAdapter(StoreAdapter):
         import requests as req
         tok = self._token(pkg)
         url = _OPENAPI + path
-        resp = req.post(url, json=body, params=query,
-                        headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, timeout=120)
-        d = resp.json()
+        try:
+            resp = req.post(url, json=body, params=query,
+                            headers={"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}, timeout=120)
+        except (req.ConnectionError, req.Timeout) as e:
+            raise StoreError(f"荣耀 {path} 网络错误: {e}")
+        try:
+            d = resp.json()
+        except Exception:
+            raise StoreError(f"荣耀 {path} 非JSON (HTTP {resp.status_code}): {resp.text[:300]}")
         if d.get("code") != 0:
             raise StoreError(f"荣耀 {path}: {d.get('msg', d)}")
         return d
@@ -134,6 +169,13 @@ class HonorAdapter(StoreAdapter):
 
     def publish(self, release: Release, dry_run: bool = False) -> SubmitResult:
         if dry_run:
+            # dry-run 本地校验：凭证字段齐全 + 安装包存在
+            cid, sec = self._cred_for(release.package_name)
+            if not cid or not sec:
+                raise StoreError(f"荣耀 dry-run：{release.package_name} 缺 client_id/client_secret")
+            apk = release.apk_path
+            if not apk or not os.path.isfile(apk):
+                raise StoreError(f"荣耀 dry-run：APK 不存在: {apk}")
             return SubmitResult(self.platform, True, "荣耀: dry-run 通过", state=AuditState.DRAFT)
 
         scb = (release.metadata or {}).get("_step_cb")
@@ -175,20 +217,26 @@ class HonorAdapter(StoreAdapter):
         if scb: scb("上传 APK 到荣耀…")
         import requests as req
         tok = self._token(pkg)
-        if pc:
-            f = open(apk, "rb")
-            try:
-                fields = [("file", (apk_name, f, "application/vnd.android.package-archive"))]
-                body = make_multipart_monitor(fields, fs, pc)
-                up_resp = req.post(upload_url, data=body,
-                                   headers={"Authorization": f"Bearer {tok}", "Content-Type": body.content_type}, timeout=600)
-            finally:
-                f.close()
-        else:
-            with open(apk, "rb") as f:
-                up_resp = req.post(upload_url, files={"file": (apk_name, f, "application/vnd.android.package-archive")},
-                                   headers={"Authorization": f"Bearer {tok}"}, timeout=600)
-        up_d = up_resp.json()
+        try:
+            if pc:
+                f = open(apk, "rb")
+                try:
+                    fields = [("file", (apk_name, f, "application/vnd.android.package-archive"))]
+                    body = make_multipart_monitor(fields, fs, pc)
+                    up_resp = req.post(upload_url, data=body,
+                                       headers={"Authorization": f"Bearer {tok}", "Content-Type": body.content_type}, timeout=600)
+                finally:
+                    f.close()
+            else:
+                with open(apk, "rb") as f:
+                    up_resp = req.post(upload_url, files={"file": (apk_name, f, "application/vnd.android.package-archive")},
+                                       headers={"Authorization": f"Bearer {tok}"}, timeout=600)
+        except (req.ConnectionError, req.Timeout) as e:
+            raise StoreError(f"荣耀文件上传网络错误: {e}")
+        try:
+            up_d = up_resp.json()
+        except Exception:
+            raise StoreError(f"荣耀文件上传返回非JSON (HTTP {up_resp.status_code}): {up_resp.text[:300]}")
         if up_d.get("code") != 0:
             raise StoreError(f"荣耀文件上传失败: {up_d.get('msg', up_d)}")
 
@@ -265,7 +313,9 @@ class HonorAdapter(StoreAdapter):
                 except (ValueError, TypeError):
                     raise StoreError(f"online_time 格式错误: {ot!r}")
             audit_body["releaseType"] = 2
-            audit_body["releaseTime"] = _dt.datetime.fromtimestamp(ot_int / 1000).strftime("%Y-%m-%dT%H:%M:%S+0800")
+            # 定时时间按东八区格式化（不依赖服务器本地时区）
+            audit_body["releaseTime"] = _dt.datetime.fromtimestamp(
+                ot_int / 1000, tz=_dt.timezone(_dt.timedelta(hours=8))).strftime("%Y-%m-%dT%H:%M:%S+0800")
         if meta.get("force_update") or meta.get("forceUpdate"):
             audit_body["forceUpdate"] = 1
         audit = self._post(pkg, "/submit-audit", audit_body, query={"appId": app_id})
@@ -292,17 +342,23 @@ class HonorAdapter(StoreAdapter):
         # （上架后 auditResult/releaseType 不会变化，定时发布只能按 releaseTime 推断是否生效）
         release_type = None
         release_time = ""
+        detail_ok = True
         try:
             det = self._get_app_detail(package_name, app_id)
             pi = det.get("publishInfo") or {}
             release_type = pi.get("releaseType")
             release_time = pi.get("releaseTime") or ""
-        except Exception:
-            pass
+        except Exception as e:
+            # 详情获取失败不静默：记录原因；下方状态判定按"无法确认"处理
+            detail_ok = False
+            print(f"荣耀: 获取应用详情失败，无法判定发布方式（按未知处理）: {e}", file=sys.stderr)
 
         state = AuditState.UNKNOWN
         if audit == 1:
-            if release_type == 2:
+            if not detail_ok:
+                # 详情获取失败：无法区分立即/定时发布，定时发布不能误判为已上架
+                state = AuditState.UNKNOWN
+            elif release_type == 2:
                 # 定时发布：定时时间已过 → 版本已生效上架；未到 → 待发布
                 scheduled = _parse_release_time(release_time)
                 state = AuditState.PENDING if scheduled is None or scheduled > datetime.datetime.now().astimezone() else AuditState.PUBLISHED

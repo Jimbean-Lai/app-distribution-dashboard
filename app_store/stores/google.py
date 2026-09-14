@@ -12,9 +12,10 @@ from __future__ import annotations
 
 import json
 import re
+import sys
 import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from ..base import StoreAdapter, StoreError
 from ..models import AuditState, Platform, Release, SubmitResult, StoreStatus, utcnow_iso
@@ -106,8 +107,15 @@ class GoogleAdapter(StoreAdapter):
                 [py, "-B", str(probe), package_name],
                 capture_output=True, text=True, timeout=30,
             )
+            if proc.returncode != 0:
+                # 子进程失败输出原因到 stderr（不静默吞掉，便于排查网络/解析问题）
+                err = (proc.stderr or "").strip()
+                print(f"Google Play 页面版本探测失败 (exit {proc.returncode}): {err[:300]}",
+                      file=_sys.stderr)
+                return ""
             return (proc.stdout or "").strip()
-        except Exception:
+        except Exception as e:
+            print(f"Google Play 页面版本探测异常: {e}", file=sys.stderr)
             return ""
 
     def _load_creds(self, pkg: str = "") -> Dict[str, Any]:
@@ -199,18 +207,33 @@ class GoogleAdapter(StoreAdapter):
                 upload_url = (f"https://androidpublisher.googleapis.com/upload/androidpublisher/v3/"
                               f"applications/{package}/edits/{edit_id}/{upload_path}?uploadType=media")
                 import httplib2 as _hb2
-                pf = _ProgressFile(str(path), fs, pc)
-                try:
-                    resp, content = service._http.request(
-                        upload_url, method="POST", body=pf,
-                        headers={"Content-Type": mime, "Content-Length": str(fs)},
-                    )
-                    if resp.status != 200:
-                        raise StoreError(
-                            f"Google Play 上传失败: HTTP {resp.status}: {content[:300]}")
-                    uploaded = json.loads(content)
-                finally:
-                    pf.close()
+                # 手写上传路径不走 googleapiclient 的 num_retries，补有限重试（3 次指数退避）；
+                # 每次重试重建 _ProgressFile（文件偏移需归零）
+                uploaded = None
+                last_err: Optional[Exception] = None
+                for attempt in range(3):
+                    pf = _ProgressFile(str(path), fs, pc)
+                    try:
+                        resp, content = service._http.request(
+                            upload_url, method="POST", body=pf,
+                            headers={"Content-Type": mime, "Content-Length": str(fs)},
+                        )
+                        if resp.status != 200:
+                            raise StoreError(
+                                f"Google Play 上传失败: HTTP {resp.status}: {content[:300]}")
+                        uploaded = json.loads(content)
+                        break
+                    except StoreError:
+                        raise
+                    except Exception as e:
+                        last_err = e
+                        print(f"Google Play 上传第 {attempt + 1} 次失败: {e}", file=sys.stderr)
+                        if attempt < 2:
+                            time.sleep(2 ** attempt)
+                    finally:
+                        pf.close()
+                if uploaded is None:
+                    raise StoreError(f"Google Play 上传失败（重试 3 次仍失败）: {last_err}")
             else:
                 # 无进度回调时走 googleapiclient 标准 upload
                 if is_aab:
@@ -275,13 +298,14 @@ class GoogleAdapter(StoreAdapter):
                 state=AuditState.SUBMITTED,
                 raw={"edit_id": edit_id, "version_code": version_code, "is_aab": is_aab},
             )
-        except StoreError:
-            raise
         except Exception as e:
+            # StoreError 路径同样清理已创建的 edit；删除失败只记录，不掩盖原始错误
             try:
                 service.edits().delete(packageName=package, editId=edit_id).execute()
-            except Exception:
-                pass
+            except Exception as de:
+                print(f"Google Play 清理 edit {edit_id} 失败: {de}", file=sys.stderr)
+            if isinstance(e, StoreError):
+                raise
             raise StoreError(f"Google Play 发布失败: {e}")
 
     def _wait_processing(self, service, package: str, edit_id: str, version_code: Any) -> None:
@@ -301,8 +325,11 @@ class GoogleAdapter(StoreAdapter):
                         return
                 time.sleep(_PROCESSING_POLL_SECONDS)
                 waited += _PROCESSING_POLL_SECONDS
-            except Exception:
-                return
+            except Exception as e:
+                # 轮询异常不静默：记录到 stderr 后继续等待（偶发查询失败不影响最终结果）
+                print(f"Google Play 等待 processing 轮询异常（继续等待）: {e}", file=sys.stderr)
+                time.sleep(_PROCESSING_POLL_SECONDS)
+                waited += _PROCESSING_POLL_SECONDS
 
     def query_status(self, package_name: str) -> StoreStatus:
         service = self._service(package_name)
@@ -387,13 +414,15 @@ class GoogleAdapter(StoreAdapter):
         #   页面版本 == API completed 版本 → 已真正上架（保持 PUBLISHED）
         #   页面版本 < API completed 版本 → 审核通过待发布（PENDING）
         if state == AuditState.PUBLISHED and self.credentials.get("managed_publishing"):
-            # API completed 版本的语义版本号（如 "202508532 (4.19.2)" -> "4.19.2"）
+            # API completed 版本取 live_names 中最大的语义版本号（多轨道/多版本时避免取到旧版）
             api_semver = ""
+            _vers = []
             for _nm in live_names:
                 _m = re.search(r"(\d+\.\d+\.\d+)", _nm)
                 if _m:
-                    api_semver = _m.group(1)
-                    break
+                    _vers.append(tuple(int(x) for x in _m.group(1).split(".")))
+            if _vers:
+                api_semver = ".".join(str(x) for x in max(_vers))
             page_ver = self._play_page_version(package_name)
             if page_ver and api_semver and page_ver == api_semver:
                 # 页面版本与 API 版本一致 → 已发布到商店

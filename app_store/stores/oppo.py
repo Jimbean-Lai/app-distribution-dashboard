@@ -14,7 +14,7 @@ from typing import Any, Dict, List, Optional
 
 from ..base import StoreAdapter, StoreError
 from ..models import AuditState, Platform, Release, SubmitResult, StoreStatus, utcnow_iso
-from ..upload_progress import ProgressFile, make_multipart_monitor
+from ..upload_progress import make_multipart_monitor
 
 _DOMAIN = "https://oop-openapi-cn.heytapmobi.com"
 
@@ -32,6 +32,7 @@ class OPPOAdapter(StoreAdapter):
         self._client_secret = self.credentials.get("client_secret") or ""
         self._token: str = ""
         self._token_for: str = ""
+        self._token_expire: float = 0.0  # token 过期时间戳（0 表示无有效缓存）
 
     def check(self) -> List[str]:
         try:
@@ -46,18 +47,6 @@ class OPPOAdapter(StoreAdapter):
         sign_str = "&".join(f"{k}={v}" for k, v in items)
         return hmac.new(secret.encode(), sign_str.encode(), hashlib.sha256).hexdigest()
 
-    def _refresh_token(self) -> None:
-        import requests as req
-        resp = req.get(f"{self._domain}/developer/v1/token", params={
-            "client_id": self._client_id,
-            "client_secret": self._client_secret,
-            "grant_type": "client_credentials",
-        }, timeout=30)
-        d = resp.json()
-        if d.get("errno") != 0 or not d.get("data", {}).get("access_token"):
-            raise StoreError(f"OPPO 获取 token 失败: {d}")
-        self._token = d["data"]["access_token"]
-
     def _cred_for(self, pkg: str) -> tuple:
         """按包名取 client_id/client_secret；无 apps 时用顶层凭证。"""
         apps = self.credentials.get("apps") or {}
@@ -69,19 +58,33 @@ class OPPOAdapter(StoreAdapter):
         return self._client_id, self._client_secret
 
     def _get_token(self, cid: str, csecret: str) -> str:
+        """请求新 token 并记录过期时间（expires_in 秒，未返回时按 1 小时并留 5 分钟余量，待确认）。"""
         import requests as req
-        resp = req.get(f"{self._domain}/developer/v1/token", params={
-            "client_id": cid, "client_secret": csecret, "grant_type": "client_credentials",
-        }, timeout=30)
-        d = resp.json()
+        try:
+            resp = req.get(f"{self._domain}/developer/v1/token", params={
+                "client_id": cid, "client_secret": csecret, "grant_type": "client_credentials",
+            }, timeout=30)
+        except (req.ConnectionError, req.Timeout) as e:
+            raise StoreError(f"OPPO 获取 token 网络错误: {e}")
+        try:
+            d = resp.json()
+        except Exception:
+            raise StoreError(f"OPPO 获取 token 非JSON (HTTP {resp.status_code}): {resp.text[:300]}")
         if d.get("errno") != 0 or not d.get("data", {}).get("access_token"):
             raise StoreError(f"OPPO 获取 token 失败: {d}")
-        return d["data"]["access_token"]
+        data = d["data"]
+        try:
+            ttl = int(data.get("expires_in") or 3600)
+        except (TypeError, ValueError):
+            ttl = 3600
+        self._token_expire = time.time() + max(ttl - 300, 60)
+        return data["access_token"]
 
-    def _request(self, method: str, path: str, data: Dict[str, Any] = None, files: Any = None, pkg: str = "") -> Dict[str, Any]:
+    def _request(self, method: str, path: str, data: Dict[str, Any] = None, files: Any = None,
+                 pkg: str = "", _retried: bool = False) -> Dict[str, Any]:
         import requests as req
         cid, csecret = self._cred_for(pkg)
-        if not self._token or self._token_for != cid:
+        if not self._token or self._token_for != cid or time.time() >= self._token_expire:
             self._token = self._get_token(cid, csecret)
             self._token_for = cid
         params = dict(data or {})
@@ -90,37 +93,55 @@ class OPPOAdapter(StoreAdapter):
         params["access_token"] = self._token
         params["timestamp"] = int(time.time())
         params["api_sign"] = self._sign(csecret, params)
-        if method.upper() == "GET":
-            resp = req.get(self._domain + path, params=params, timeout=60)
-        else:
-            resp = req.post(self._domain + path, data=params, files=files, timeout=120)
+        try:
+            if method.upper() == "GET":
+                resp = req.get(self._domain + path, params=params, timeout=60)
+            else:
+                resp = req.post(self._domain + path, data=params, files=files, timeout=120)
+        except (req.ConnectionError, req.Timeout) as e:
+            raise StoreError(f"OPPO {path} 网络错误: {e}")
         try:
             payload = resp.json()
         except Exception:
-            raise StoreError(f"OPPO 非JSON: {resp.text[:300]}")
+            raise StoreError(f"OPPO {path} 非JSON (HTTP {resp.status_code}): {resp.text[:300]}")
         if payload.get("errno") != 0:
+            # token 失效（errmsg 含 token 字样）时强制刷新并重试一次
+            msg = str(payload.get("errmsg", ""))
+            if not _retried and "token" in msg.lower():
+                self._token = self._get_token(cid, csecret)
+                self._token_for = cid
+                return self._request(method, path, data=data, files=files, pkg=pkg, _retried=True)
             raise StoreError(f"OPPO {path}: {payload.get('errmsg', payload)}")
         return payload
 
-    def _upload_file(self, file_path: str, cb=None, pkg: str = "") -> str:
+    def _upload_file(self, file_path: str, cb=None, pkg: str = "", file_type: str = "apk") -> str:
+        """上传文件并返回文件 url。file_type 按用途区分（apk/icon/pic 等）；
+        图标与截图的正确 type 取值待确认（官方文档未明确，先按用途区分传入）。"""
         import requests as req
         cfg = self._request("GET", "/resource/v1/upload/get-upload-url", pkg=pkg)
         upload_url = cfg["data"]["upload_url"]
         upload_sign = cfg["data"]["sign"]
         file_size = os.path.getsize(file_path)
-        if cb:
-            with open(file_path, "rb") as f:
-                fields = [
-                    ("sign", upload_sign),
-                    ("type", "apk"),
-                    ("file", (os.path.basename(file_path), f, "application/octet-stream")),
-                ]
-                body = make_multipart_monitor(fields, file_size, cb)
-                resp = req.post(upload_url, data=body, headers={"Content-Type": body.content_type}, timeout=600)
-        else:
-            with open(file_path, "rb") as f:
-                resp = req.post(upload_url, data={"sign": upload_sign, "type": "apk"}, files={"file": (os.path.basename(file_path), f)}, timeout=600)
-        r = resp.json()
+        try:
+            if cb:
+                with open(file_path, "rb") as f:
+                    fields = [
+                        ("sign", upload_sign),
+                        ("type", file_type),
+                        ("file", (os.path.basename(file_path), f, "application/octet-stream")),
+                    ]
+                    body = make_multipart_monitor(fields, file_size, cb)
+                    resp = req.post(upload_url, data=body, headers={"Content-Type": body.content_type}, timeout=600)
+            else:
+                with open(file_path, "rb") as f:
+                    resp = req.post(upload_url, data={"sign": upload_sign, "type": file_type},
+                                    files={"file": (os.path.basename(file_path), f)}, timeout=600)
+        except (req.ConnectionError, req.Timeout) as e:
+            raise StoreError(f"OPPO 文件上传网络错误: {e}")
+        try:
+            r = resp.json()
+        except Exception:
+            raise StoreError(f"OPPO 上传返回非JSON (HTTP {resp.status_code}): {resp.text[:300]}")
         if r.get("errno") != 0:
             raise StoreError(f"OPPO 上传错误: {r}")
         return r["data"]["url"] if isinstance(r.get("data"), dict) else r["data"]
@@ -128,6 +149,13 @@ class OPPOAdapter(StoreAdapter):
     def publish(self, release: Release, dry_run: bool = False) -> SubmitResult:
         scb = (release.metadata or {}).get("_step_cb")
         if dry_run:
+            # dry-run 本地校验：凭证字段齐全 + 安装包存在
+            cid, csecret = self._cred_for(release.package_name)
+            if not cid or not csecret:
+                raise StoreError(f"OPPO dry-run：{release.package_name} 缺 client_id/client_secret")
+            apk = release.apk_path
+            if not apk or not os.path.isfile(apk):
+                raise StoreError(f"OPPO dry-run：APK 不存在: {apk}")
             return SubmitResult(self.platform, True, "OPPO: dry-run 通过", state=AuditState.DRAFT)
         apk = release.apk_path
         if not apk or not os.path.isfile(apk):
@@ -174,8 +202,11 @@ class OPPOAdapter(StoreAdapter):
             "detail_desc": meta.get("detail_desc") or existing.get("detail_desc", ""),
             "update_desc": release.release_notes or existing.get("update_desc", ""),
             "privacy_source_url": meta.get("privacy_source_url") or existing.get("privacy_source_url", ""),
-            "icon_url": (self._upload_file(meta["icon"]) if meta.get("icon") else existing.get("icon_url", "")),
-            "pic_url": (self._upload_images(meta["screenshots"]) if meta.get("screenshots") else existing.get("pic_url", "")),
+            # icon/截图上传需带 pkg（多应用凭证按包名取），type 取值待确认（见 _upload_file 注释）
+            "icon_url": (self._upload_file(meta["icon"], pkg=release.package_name, file_type="icon")
+                         if meta.get("icon") else existing.get("icon_url", "")),
+            "pic_url": (self._upload_images(meta["screenshots"], pkg=release.package_name, file_type="pic")
+                        if meta.get("screenshots") else existing.get("pic_url", "")),
             "test_desc": meta.get("test_desc") or existing.get("test_desc", ""),
             # 商务联系人（优先 meta 配置，其次复用现网资料）
             "business_username": meta.get("business_username") or existing.get("business_username", ""),
@@ -205,7 +236,9 @@ class OPPOAdapter(StoreAdapter):
                     ot_int = int(dt.timestamp() * 1000)
                 except (ValueError, TypeError):
                     raise StoreError(f"online_time 格式错误: {ot!r}")
-            params["sche_online_time"] = _dt.datetime.fromtimestamp(ot_int / 1000).strftime("%Y-%m-%d %H:%M:%S")
+            # 定时时间按东八区格式化（不依赖服务器本地时区）
+            params["sche_online_time"] = _dt.datetime.fromtimestamp(
+                ot_int / 1000, tz=_dt.timezone(_dt.timedelta(hours=8))).strftime("%Y-%m-%d %H:%M:%S")
         else:
             params["online_type"] = 1
 
@@ -292,5 +325,6 @@ class OPPOAdapter(StoreAdapter):
                 h.update(c)
         return h.hexdigest()
 
-    def _upload_images(self, paths: List[str]) -> str:
-        return ",".join(self._upload_file(p) for p in paths)
+    def _upload_images(self, paths: List[str], pkg: str = "", file_type: str = "pic") -> str:
+        # 截图上传 type 取值待确认（官方文档未明确），先与 apk 区分传入
+        return ",".join(self._upload_file(p, pkg=pkg, file_type=file_type) for p in paths)

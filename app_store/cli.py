@@ -49,6 +49,13 @@ def cmd_apps(args: argparse.Namespace) -> int:
     rows: List[Dict[str, Any]] = []
     for app in catalog.all_apps():
         build = app.get("latest_build") or ""
+        build_exists = False
+        if build:
+            build_path = os.path.expanduser(build)
+            if not os.path.isabs(build_path):
+                # 目录内相对路径以 catalog 所在目录为基准
+                build_path = os.path.join(str(catalog.base_dir), build_path)
+            build_exists = os.path.exists(build_path)
         rows.append(
             {
                 "id": app["id"],
@@ -57,7 +64,7 @@ def cmd_apps(args: argparse.Namespace) -> int:
                 "package_name": app.get("package_name") or "",
                 "latest_build": build,
                 "version_name": app.get("version_name") or "",
-                "build_exists": bool(build),
+                "build_exists": build_exists,
             }
         )
     if args.json:
@@ -73,20 +80,25 @@ import datetime as _dt
 
 
 def _parse_online_time(value):
-    """Convert timestamp(ms) or 'YYYY-MM-DD HH:MM'/'YYYY-MM-DDTHH:MM' to ms."""
+    """解析 --online-time：纯数字按时间戳处理（>10**11 视为毫秒，否则视为秒转毫秒），
+    或 'YYYY-MM-DD HH:MM'/'YYYY-MM-DDTHH:MM' 本地时间；返回毫秒时间戳。"""
     if not value:
         return None
-    import datetime as _dt
     try:
-        return int(value)
+        ts = int(value)
     except (ValueError, TypeError):
-        pass
+        ts = None
+    if ts is not None:
+        if ts < 0:
+            raise StoreError("online_time 不能为负数: " + repr(value))
+        # 兼容秒/毫秒：10**11 毫秒 ≈ 1973 年，合理的秒级时间戳均小于该值
+        return ts if ts > 10**11 else ts * 1000
     s = str(value).replace("T", " ")[:16]
     try:
         dt = _dt.datetime.strptime(s, "%Y-%m-%d %H:%M")
         return int(dt.timestamp() * 1000)
     except (ValueError, TypeError):
-        raise StoreError("online_time format error: " + repr(value))
+        raise StoreError("online_time 格式错误（支持秒/毫秒时间戳或 'YYYY-MM-DD HH:MM'）: " + repr(value))
 def _resolve_release(args: argparse.Namespace) -> Any:
     """解析 release：优先 --app（从目录取），其次 --release 文件；都给了则合并(文件覆盖目录)。"""
     catalog = get_catalog(args.catalog) if hasattr(args, "catalog") else get_catalog()
@@ -112,8 +124,10 @@ def _resolve_release(args: argparse.Namespace) -> Any:
         else:
             for f in release.__dataclass_fields__:
                 v = getattr(file_release, f)
-                if v not in (None, "", 0):
-                    setattr(release, f, v)
+                # 空值（None/空串/0/空 dict/list）不覆盖目录注入的值，例如 metadata:{}
+                if v is None or v == "" or v == 0 or (isinstance(v, (dict, list)) and not v):
+                    continue
+                setattr(release, f, v)
     if release is None:
         raise StoreError("请提供 --app <目录ID> 或 --release <清单文件>（可用 appstore apps 查看应用ID）")
     # 版本/说明/轨道/包 的显式覆盖
@@ -126,7 +140,9 @@ def _resolve_release(args: argparse.Namespace) -> Any:
     if getattr(args, "track", None):
         release.track = args.track
     if getattr(args, "apk_path", None):
-        release.apk_path = release.apk_path  # 已在 to_release 里处理
+        release.apk_path = args.apk_path
+    if getattr(args, "aab_path", None):
+        release.aab_path = args.aab_path
     if not release.package_name:
         raise StoreError("release 缺少 package_name（目录中未配置或清单未填写）")
     if not release.aab_path and not release.apk_path:
@@ -142,7 +158,8 @@ def cmd_publish(args: argparse.Namespace) -> int:
         release.track = args.track
 
     if args.all:
-        targets = [k for k in creds if k in PLATFORM_VALUES]
+        # Apple 仅支持查询已上架版本，发布时排除
+        targets = [k for k in creds if k in PLATFORM_VALUES and k != Platform.APPLE.value]
         if not targets:
             raise StoreError("credentials 文件中没有可识别的平台配置（--all）")
     else:
@@ -159,6 +176,9 @@ def cmd_publish(args: argparse.Namespace) -> int:
             results.append(adapter.publish(release, dry_run=args.dry_run))
         except StoreError as e:
             errors.append({"platform": key, "error": str(e)})
+        except Exception as e:
+            # 未预期异常（网络错误等）转为该平台错误，继续后续平台，不打印堆栈
+            errors.append({"platform": key, "error": f"{type(e).__name__}: {e}"})
 
     if args.json:
         _json_out({"release": _release_payload(release), "results": [_publish_row(r) for r in results], "errors": errors})
@@ -211,6 +231,9 @@ def cmd_status(args: argparse.Namespace) -> int:
             results.append(adapter.query_status(package))
         except StoreError as e:
             errors.append({"platform": key, "error": str(e)})
+        except Exception as e:
+            # 未预期异常（网络错误等）转为该平台错误，继续后续平台，不打印堆栈
+            errors.append({"platform": key, "error": f"{type(e).__name__}: {e}"})
 
     if args.json:
         _json_out({"package": package, "results": [_status_row(r) for r in results], "errors": errors})

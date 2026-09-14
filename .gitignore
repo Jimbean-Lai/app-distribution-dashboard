@@ -44,3 +44,6 @@ app_store/templates/*.bak*
 
 # 需求反馈+调研整合文档（含待填联系方式，不公开）
 docs/开放平台API能力需求与调研.md
+
+# AI 代理指引文件（本地使用，不入库）
+AGENTS.md

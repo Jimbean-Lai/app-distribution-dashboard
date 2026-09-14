@@ -22,12 +22,11 @@ import json
 import os
 import time
 import urllib.parse
-import warnings
 from typing import Any, Dict, List
 
 from ..base import StoreAdapter, StoreError
 from ..models import AuditState, Platform, Release, SubmitResult, StoreStatus, utcnow_iso
-from ..upload_progress import make_multipart_monitor, ProgressFile
+from ..upload_progress import make_multipart_monitor
 
 _DOMAIN = "https://developer-api.vivo.com.cn/router/rest"
 
@@ -101,9 +100,12 @@ class VivoAdapter(StoreAdapter):
             # multipart：参数里去掉签名、二进制单独传
             # VIVO 的 API：上传文件接口一般先把文件上传获得流水号（服务端拉取）？
             raise StoreError("VIVO 文件上传走专门接口（见 _get_apk_token），此处不适用")
-            resp = None
-        else:
+        try:
             resp = req.post(_DOMAIN, data=data, headers=headers, timeout=120)
+        except req.exceptions.ConnectionError as e:
+            raise StoreError(f"vivo 网络连接失败: {e}")
+        except req.exceptions.Timeout as e:
+            raise StoreError(f"vivo 请求超时: {e}")
         try:
             payload = resp.json()
         except Exception:
@@ -115,6 +117,12 @@ class VivoAdapter(StoreAdapter):
     def publish(self, release: Release, dry_run: bool = False) -> SubmitResult:
         scb = (release.metadata or {}).get("_step_cb")
         if dry_run:
+            # dry-run 也做本地校验：凭证字段非空、安装包存在
+            key, secret = self._cred_for(release.package_name)
+            if not key or not secret:
+                raise StoreError("vivo 凭证缺少 access_key/access_secret")
+            if not release.apk_path or not os.path.isfile(release.apk_path):
+                raise StoreError(f"vivo APK 不存在: {release.apk_path}")
             return SubmitResult(self.platform, True, "vivo: dry-run 通过", state=AuditState.DRAFT)
 
         apk = release.apk_path
@@ -141,7 +149,7 @@ class VivoAdapter(StoreAdapter):
             "updateDesc": release.release_notes or "",
         }
         # 定时
-        ot = meta.get("online_time") or release.metadata.get("online_time")
+        ot = meta.get("online_time")
         if ot:
             import datetime as _dt
             try:
@@ -153,7 +161,9 @@ class VivoAdapter(StoreAdapter):
                 except (ValueError, TypeError):
                     raise StoreError(f"online_time 格式错误: {ot!r}")
             params["onlineType"] = 2
-            params["scheOnlineTime"] = _dt.datetime.fromtimestamp(ot_int / 1000).strftime("%Y-%m-%d %H:%M:%S")
+            # vivo 定时时间按北京时间(UTC+8)格式化，显式指定时区，不依赖本地时区
+            _tz8 = _dt.timezone(_dt.timedelta(hours=8))
+            params["scheOnlineTime"] = _dt.datetime.fromtimestamp(ot_int / 1000, tz=_tz8).strftime("%Y-%m-%d %H:%M:%S")
         else:
             params["onlineType"] = 1
 
@@ -181,21 +191,26 @@ class VivoAdapter(StoreAdapter):
         }
         params["sign"] = self._sign(params, secret)
         file_size = os.path.getsize(apk_path)
-        if cb:
-            # multipart 用 MultipartEncoderMonitor 流式 → 实时进度
-            f = open(apk_path, "rb")
-            try:
-                fields = list(params.items()) + [
-                    ("file", (apk_path.split("/")[-1], f, "application/vnd.android.package-archive")),
-                ]
-                body = make_multipart_monitor(fields, file_size, cb)
-                resp = req.post(_DOMAIN, data=body, headers={"Content-Type": body.content_type}, timeout=600)
-            finally:
-                f.close()
-        else:
-            with open(apk_path, "rb") as f:
-                files = {"file": (apk_path.split("/")[-1], f, "application/vnd.android.package-archive")}
-                resp = req.post(_DOMAIN, data=params, files=files, timeout=600)
+        try:
+            if cb:
+                # multipart 用 MultipartEncoderMonitor 流式 → 实时进度
+                f = open(apk_path, "rb")
+                try:
+                    fields = list(params.items()) + [
+                        ("file", (apk_path.split("/")[-1], f, "application/vnd.android.package-archive")),
+                    ]
+                    body = make_multipart_monitor(fields, file_size, cb)
+                    resp = req.post(_DOMAIN, data=body, headers={"Content-Type": body.content_type}, timeout=600)
+                finally:
+                    f.close()
+            else:
+                with open(apk_path, "rb") as f:
+                    files = {"file": (apk_path.split("/")[-1], f, "application/vnd.android.package-archive")}
+                    resp = req.post(_DOMAIN, data=params, files=files, timeout=600)
+        except req.exceptions.ConnectionError as e:
+            raise StoreError(f"vivo 上传网络连接失败: {e}")
+        except req.exceptions.Timeout as e:
+            raise StoreError(f"vivo 上传请求超时: {e}")
         try:
             payload = resp.json()
         except Exception:
