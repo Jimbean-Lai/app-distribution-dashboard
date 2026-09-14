@@ -179,7 +179,7 @@ var inp=$(t==="aab"?"paab":"papk");inp.value=res.path;lg("已保存到: "+res.pa
 autoMeta(res.path,ST.cur.id,t)}).catch(function(e){busy(false);lg("上传异常: "+e,"err")})}
 function cm(){document.querySelectorAll(".overlay").forEach(function(e){if(e.id!=="toast")e.remove()})}
 function pth(){var a=ST.cur;if(!a)return;var ab=$("paab").value.trim(),ap=$("papk").value.trim();busy(true);api("/api/apps/update",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({app_id:a.id,aab_build:ab,apk_build:ap})}).then(function(r){if(r.ok){lg("路径已保存","ok");toast("路径已保存");if(ap&&!r.error)autoMeta(ap,a.id,"apk");if(ab&&!r.error)autoMeta(ab,a.id,"aab")}else{lg("保存失败: "+JSON.stringify(r),"err")}}).finally(function(){busy(false)})}
-function publishPlatsHTML(){var pubs=(ST.platforms||[]).filter(function(p){return p.platform!=="apple"});var labelMap={huawei:"华为",oppo:"OPPO",vivo:"VIVO",xiaomi:"小米",honor:"荣耀",google:"Google Play"};return pubs.map(function(p){var nm=labelMap[p.platform]||p.display_name;var badge=p.availability==="ready"?"":"(骨架)";return '<label class=plat-item><input type=checkbox class=plat-cb value="'+p.platform+'" '+""+'><span>'+nm+'</span>'+badge+'</label>'}).join("")}
+function publishPlatsHTML(){var pubs=(ST.platforms||[]).filter(function(p){return p.platform!=="apple"});var labelMap={huawei:"华为",oppo:"OPPO",vivo:"VIVO",xiaomi:"小米",honor:"荣耀",google:"Google Play",qq:"应用宝"};return pubs.map(function(p){var nm=labelMap[p.platform]||p.display_name;var badge=p.availability==="ready"?"":"(骨架)";return '<label class=plat-item><input type=checkbox class=plat-cb value="'+p.platform+'" '+""+'><span>'+nm+'</span>'+badge+'</label>'}).join("")}
 function platAll(on){document.querySelectorAll(".plat-cb").forEach(function(c){c.checked=!!on})}
 function selPlats(){var arr=[];document.querySelectorAll(".plat-cb:checked").forEach(function(c){arr.push(c.value)});return arr.length?arr.join(","):"all"}
 function autoMeta(path,appId,type){type=type||(path.toLowerCase().endsWith(".aab")?"aab":"apk");
@@ -269,8 +269,8 @@ function doReleaseNow(){clh();var a=ST.cur;if(!a||!a.package_name){toast("请选
 lg("== 华为立即上线 "+a.name+" ==");busy(true);
 api("/api/release-now",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({app_id:a.id,platform:"huawei"})}).then(function(r){busy(false);if(r&&r.ok){lg("华为立即上线请求成功"+(r.result&&r.result.message?"："+r.result.message:""),"ok");ds()}else{lg("立即上线失败: "+((r&&r.error)||"未知错误"),"err")}}).catch(function(){busy(false);lg("立即上线请求失败","err")})}
 function renderStatusGrid(s){var e=document.getElementById("sg");if(!e)return;var sb=document.getElementById("shareBtn");if(!s||!s.length){ST.statuses=null;if(sb)sb.classList.add("hide");e.innerHTML='<div class=muted>无数据</div>';return}
-var order={huawei:0,oppo:1,vivo:2,xiaomi:3,honor:4,google:5,apple:6}
-var nm={huawei:"华为",oppo:"OPPO",vivo:"VIVO",xiaomi:"小米",honor:"荣耀",google:"Google Play",apple:"Apple"}
+var order={huawei:0,oppo:1,vivo:2,xiaomi:3,honor:4,google:5,apple:6,qq:7}
+var nm={huawei:"华为",oppo:"OPPO",vivo:"VIVO",xiaomi:"小米",honor:"荣耀",google:"Google Play",apple:"Apple",qq:"应用宝"}
 var list=(s||[]).slice().sort(function(a,b){return (order[a.platform]!==undefined?order[a.platform]:99)-(order[b.platform]!==undefined?order[b.platform]:99)});ST.statuses=list;if(sb)sb.classList.remove("hide");
 var h="";list.forEach(function(x){
 var liveArr=(x.live_version_names||[]).slice();if(!liveArr.length&&x.live_version_codes)liveArr=x.live_version_codes.map(String);
@@ -288,7 +288,7 @@ ic.onload=function(){drawShareCard(list,a,ic)};
 ic.onerror=function(){drawShareCard(list,a,null)};
 ic.src="/api/app/icon?app_id="+encodeURIComponent(a.id)}
 function drawShareCard(list,a,ic){
-var nm={huawei:"华为",oppo:"OPPO",vivo:"VIVO",xiaomi:"小米",honor:"荣耀",google:"Google Play",apple:"Apple"};
+var nm={huawei:"华为",oppo:"OPPO",vivo:"VIVO",xiaomi:"小米",honor:"荣耀",google:"Google Play",apple:"Apple",qq:"应用宝"};
 var bd={published:["已上架","#e8f6ec","#1d8a3e"],reviewing:["审核中","#fdf0e7","#c93400"],pending:["待发布","#e8f1fd","#0066cc"],draft:["草稿","#f0f4f8","#43688c"],submitted:["已提交","#f0f4f8","#43688c"],rejected:["已拒绝","#fdeceb","#d70015"],unknown:["未知","#f2f2f7","#86868b"]};
 var FONT='-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
 var W=640,PX=34,HEAD=104,ROW=66,FOOT=44,SC=2;

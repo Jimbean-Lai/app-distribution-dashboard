@@ -19,6 +19,7 @@ class Platform(str, Enum):
     HONOR = "honor"
     GOOGLE = "google"
     APPLE = "apple"
+    QQ = "qq"
 
     @property
     def display_name(self) -> str:
@@ -30,6 +31,7 @@ class Platform(str, Enum):
             Platform.HONOR: "荣耀应用市场",
             Platform.GOOGLE: "Google Play",
             Platform.APPLE: "App Store",
+            Platform.QQ: "腾讯应用宝",
         }[self]
 
 

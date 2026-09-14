@@ -18,6 +18,7 @@ _PLATFORM_MODULES = {
     Platform.HONOR.value: "app_store.stores.honor",
     Platform.GOOGLE.value: "app_store.stores.google",
     Platform.APPLE.value: "app_store.stores.apple",
+    Platform.QQ.value: "app_store.stores.qq",
 }
 
 _REGISTRY: Dict[str, Type[StoreAdapter]] = {}
