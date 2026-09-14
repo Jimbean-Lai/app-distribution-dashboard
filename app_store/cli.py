@@ -308,7 +308,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--platform", choices=sorted(PLATFORM_VALUES), help="目标平台")
     p.add_argument("--all", action="store_true", help="逐个发布到 credentials 文件中配置的所有平台")
     p.add_argument("--credentials", default=DEFAULT_CREDENTIALS, help="凭证 JSON 文件路径（默认 config/credentials.json）")
-    p.add_argument("--catalog", default="apps/catalog.json", help="应用目录 JSON 路径")
+    p.add_argument("--catalog", default=argparse.SUPPRESS, help="应用目录 JSON 路径（覆盖全局 --catalog）")
     p.add_argument("--release", help="release 清单(JSON/YAML)路径（可选，与 --app 二选一或合并覆盖）")
     p.add_argument("--dry-run", action="store_true", help="只做校验，不实际提交")
     p.add_argument("--track", help="覆盖清单中的 Google Play 轨道(production/beta/alpha/internal)")
@@ -325,7 +325,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--platform", choices=sorted(PLATFORM_VALUES), help="指定平台(不填则查凭证中所有平台)")
     s.add_argument("--package", help="应用包名（不填则用 --app 的包名）")
     s.add_argument("--credentials", default=DEFAULT_CREDENTIALS, help="凭证 JSON 文件路径")
-    s.add_argument("--catalog", default="apps/catalog.json", help="应用目录 JSON 路径")
+    s.add_argument("--catalog", default=argparse.SUPPRESS, help="应用目录 JSON 路径（覆盖全局 --catalog）")
     s.set_defaults(func=cmd_status)
 
     v = sub.add_parser("validate", help="校验凭证与依赖")
@@ -339,7 +339,7 @@ def build_parser() -> argparse.ArgumentParser:
     web.add_argument("--host", default="127.0.0.1", help="监听地址（默认 127.0.0.1）")
     web.add_argument("--port", type=int, default=8090, help="监听端口（默认 8090）")
     web.add_argument("--credentials", default=DEFAULT_CREDENTIALS, help="凭证 JSON 文件路径")
-    web.add_argument("--catalog", default="apps/catalog.json", help="应用目录 JSON 路径")
+    web.add_argument("--catalog", default=argparse.SUPPRESS, help="应用目录 JSON 路径（覆盖全局 --catalog）")
     web.add_argument("--open", action="store_true", help="启动后自动打开浏览器")
     web.set_defaults(func=cmd_web)
 
