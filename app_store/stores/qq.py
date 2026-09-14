@@ -12,12 +12,15 @@
   /query_app_detail         查询应用详情（含线上 VersionCode/VersionName）
   /get_file_upload_info     获取腾讯云 COS 预签名 URL + 上传流水号（每天限 100 次）
   PUT <pre_sign_url>        APK 原始字节直传 COS（Content-Type: application/octet-stream）
-  /update_app               应用更新提审（APK 流水号+MD5+版本特性说明，每天限 50 次，超时建议 60s+）
+  /update_app               应用更新提审（APK 流水号+MD5+版本特性说明+发布类型，每天限 50 次，超时建议 60s+）
   /query_app_update_status  审核状态（1 审核中 / 2 驳回 / 3 通过 / 8 开发者撤销）
 
 签名：全部参数（公共 user_id/timestamp + 业务参数）按 ASCII 升序拼 k1=v1&k2=v2
 （值为 null 不参与、参数名值不做 URL 编码）→ HmacSHA256(key=access_secret) → 小写 hex，追加 sign。
-限制：仅主账号调用；仅支持已上线应用的更新（不支持新应用首发）；无定时上线/立即上线 API。
+发布类型（update_app 的 deploy_type，必填）：
+  1 = 审核通过后立即发布；2 = 定时发布（deploy_time 秒级时间戳，北京时间）。
+  定时限制：至少提交审核后 6 小时、仅 30 天内（平台规则，适配器前置校验）。
+限制：仅主账号调用；仅支持已上线应用的更新（不支持新应用首发）。
 """
 import hashlib
 import hmac
@@ -166,6 +169,29 @@ class QQAdapter(StoreAdapter):
         store_cn = meta.get("store_name_cn") or ""
         if store_cn:
             params["app_name"] = store_cn
+        # 发布类型：定时上线（online_time）→ deploy_type=2 + deploy_time；否则审核通过后立即发布
+        import datetime as _dt
+        ot = meta.get("online_time")
+        if ot:
+            try:
+                ot_sec = int(ot) // (1000 if int(ot) > 10 ** 11 else 1)
+            except (ValueError, TypeError):
+                try:
+                    parsed = _dt.datetime.strptime(str(ot).replace("T", " ")[:16], "%Y-%m-%d %H:%M")
+                    ot_sec = int(parsed.timestamp())
+                except (ValueError, TypeError):
+                    raise StoreError(f"应用宝: online_time 无法解析（时间戳或 YYYY-MM-DD[THH:MM]）: {ot!r}")
+            now = _dt.datetime.now().timestamp()
+            if ot_sec <= now:
+                raise StoreError("应用宝: 定时发布时间必须晚于当前时间")
+            if ot_sec - now < 6 * 3600:
+                raise StoreError("应用宝: 定时发布时间至少需在提交审核 6 小时后（平台规则）")
+            if ot_sec - now > 30 * 86400:
+                raise StoreError("应用宝: 定时发布仅可选择 30 天内的时间（平台规则）")
+            params["deploy_type"] = 2
+            params["deploy_time"] = ot_sec
+        else:
+            params["deploy_type"] = 1
         payload = self._api("/update_app", params, timeout=90)
         return SubmitResult(
             self.platform, True,
