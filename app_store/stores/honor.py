@@ -18,6 +18,7 @@
 关键字段：fileType=100(APK应用包)；APK 包名须与应用绑定包名一致，版本 >= 已上架。
 """
 # flake8: noqa
+import datetime
 import hashlib
 import json
 import os
@@ -33,6 +34,19 @@ _OPENAPI = "https://appmarket-openapi-drcn.cloud.honor.com/openapi/v1/publish"
 
 # 文件类型：100=APK 应用包（其余：1=图标 3=应用介绍截图 等，详见文档文件类型表）
 _FILE_TYPE_APK = 100
+
+
+def _parse_release_time(ts: str) -> Optional[datetime.datetime]:
+    """解析荣耀 publishInfo.releaseTime（如 2026-09-14T09:27:49+0800）为带时区时间；失败返回 None。"""
+    if not ts:
+        return None
+    try:
+        return datetime.datetime.strptime(ts, "%Y-%m-%dT%H:%M:%S%z")
+    except ValueError:
+        try:
+            return datetime.datetime.fromisoformat(ts.replace("+0800", "+08:00"))
+        except ValueError:
+            return None
 
 
 class HonorAdapter(StoreAdapter):
@@ -274,7 +288,8 @@ class HonorAdapter(StoreAdapter):
 
         # 0审核中 1通过 2不通过 3其他 4编辑未提交
         # 已上架 vs 待发布：auditResult=1(通过)时查 publishInfo.releaseType
-        # releaseType=2(定时) → 待发布(定时)；=1(立即) → 已上架
+        # releaseType=1(立即) → 已上架；=2(定时) → 定时时间未到=待发布、已到=已生效上架
+        # （上架后 auditResult/releaseType 不会变化，定时发布只能按 releaseTime 推断是否生效）
         release_type = None
         release_time = ""
         try:
@@ -287,7 +302,12 @@ class HonorAdapter(StoreAdapter):
 
         state = AuditState.UNKNOWN
         if audit == 1:
-            state = AuditState.PENDING if release_type == 2 else AuditState.PUBLISHED
+            if release_type == 2:
+                # 定时发布：定时时间已过 → 版本已生效上架；未到 → 待发布
+                scheduled = _parse_release_time(release_time)
+                state = AuditState.PENDING if scheduled is None or scheduled > datetime.datetime.now().astimezone() else AuditState.PUBLISHED
+            else:
+                state = AuditState.PUBLISHED
         elif audit == 0:
             state = AuditState.REVIEWING
         elif audit == 4:
