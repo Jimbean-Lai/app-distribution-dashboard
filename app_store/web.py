@@ -220,11 +220,12 @@ def _save_history():
         pass
 
 
-def _new_task(app_id, platform, dry_run, apk_path="", aab_path=""):
+def _new_task(app_id, platform, dry_run, apk_path="", aab_path="", version_name=""):
     tid = _u.uuid4().hex[:12]
     with _task_lock:
         _TASKS[tid] = {
             "id": tid, "app_id": app_id, "platform": platform, "dry_run": dry_run,
+            "version_name": version_name,
             "status": "running", "progress": 0, "stage": "准备中",
             "steps": [], "results": [], "errors": [],
             "upload": None,
@@ -321,6 +322,8 @@ def _publish_worker(tid: str):
         )
         release.metadata["auto_review"] = bool(params.get("auto_review"))
         _step(tid, f"包名: {release.package_name} v{release.version_name or '?'}")
+        if release.version_name:
+            _update(tid, version_name=release.version_name)  # 实际发布的版本号（含 catalog 回落）
         _update(tid, progress=8, stage="读取配置")
         if platform == "all":
             targets = [k for k in creds if k in PUBLISH_PLATFORMS]
@@ -716,7 +719,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
 
         # 创建异步任务
-        tid = _new_task(app_id, platform, dry_run, apk_path=apk_path, aab_path=aab_path)
+        tid = _new_task(app_id, platform, dry_run, apk_path=apk_path, aab_path=aab_path,
+                        version_name=version_name)
         with _task_lock:
             _PENDING_PATHS[tid].update({
                 "version_name": version_name, "version_code": version_code,
