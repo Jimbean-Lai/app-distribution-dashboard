@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import re
 import zipfile
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 from .base import StoreError
 
@@ -117,14 +117,6 @@ def _varint(buf: bytes, i: int) -> Tuple[int, int]:
     return v, i
 
 
-def _decode_string(buf: bytes, i: int) -> Tuple[Optional[str], int]:
-    """field value bytes -> utf-8 string；失败返回 None。"""
-    try:
-        return buf[i:].decode("utf-8", errors="replace").split("\x00")[0], len(buf)
-    except Exception:
-        return None, i
-
-
 class _XmlAttr:
     __slots__ = ("name", "value")
 
@@ -140,47 +132,6 @@ class _XmlNode:
         self.name = ""
         self.attrs: List[_XmlAttr] = []
         self.children: List["_XmlNode"] = []
-
-
-def _parse_node(buf: bytes, i: int, end: int) -> Tuple[_XmlNode, int]:
-    """递归解析一个 XmlNode message（字段：1=name string, 2=attribute, 3=child）。"""
-    node = _XmlNode()
-    while i < end:
-        tag, ni = _varint(buf, i)
-        field = tag >> 3
-        wt = tag & 7
-        if wt == 0:
-            _, i = _varint(buf, ni)
-        elif wt == 1:
-            i = ni + 8
-        elif wt == 2:
-            ln, li = _varint(buf, ni)
-            sbuf = li
-            ev = sbuf + ln
-            if ev > end:
-                break
-            if field == 1:
-                node.name = buf[sbuf:ev].decode("utf-8", errors="replace")
-            elif field == 2:
-                attr, _ = _parse_node(buf, sbuf, ev)
-                a = _XmlAttr()
-                a.name = attr.name
-                # value 存于 attr.child（attribute 的 value 在 field 2 的嵌套里）
-                for c in attr.children:
-                    pass
-                # 从属性节点的原始字段提取：attr 自身是 XmlAttribute {1:name, 2:value}
-                # 上面 _parse_node 会把 2 当作 child 放进 children；这里手工再取
-                a.value = attr.name  # placeholder
-                node.attrs.append(a)
-            elif field == 3:
-                child, _ = _parse_node(buf, sbuf, ev)
-                node.children.append(child)
-            i = ev
-        elif wt == 5:
-            i = ni + 4
-        else:
-            break
-    return node, i
 
 
 def _parse_node2(buf: bytes, i: int, end: int) -> Tuple[_XmlNode, int]:
@@ -247,9 +198,11 @@ def _walk(node: _XmlNode, collected: Dict[str, str]) -> None:
 
 
 def parse_aab(path: str) -> Dict[str, Any]:
-    """解析 AAB 提取 package（以及 versionVersion/VersionCode，若 manifest 顶层有）。
+    """解析 AAB 提取 package（以及 versionName/versionCode，若 manifest 属性中有）。
 
     不需 bundletool；读 base/manifest/AndroidManifest.xml 递归解 protobuf 属性。
+    注意：AAB 的 versionCode 常以整数（varint）形式编码，当前解码器只取字符串属性，
+    因此 versionCode 多数情况下取不到（返回 None），需以 APK 解析或人工配置为准。
     返回 {package_name, version_name, version_code, label}。
     """
     if not path or not os.path.isfile(path):

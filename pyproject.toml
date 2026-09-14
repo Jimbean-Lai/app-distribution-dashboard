@@ -7,7 +7,13 @@ name = "app-store-publisher"
 version = "0.1.0"
 description = "一键发布 App 到华为/OPPO/vivo/小米/荣耀/Google，并查询审核进度与已上架版本号"
 requires-python = ">=3.9"
-dependencies = ["requests-toolbelt>=1.0.0", "cryptography>=41.0"]
+dependencies = [
+    "requests",                # 各平台 HTTP API 调用
+    "requests-toolbelt>=1.0.0",  # 上传进度回调（MultipartEncoderMonitor）
+    "cryptography>=41.0",      # Apple App Store Connect API JWT 签名（ES256）
+    "pycryptodome",            # 小米 X509 公钥 RSA 加密签名
+    "androguard",              # APK/AAB 元信息解析（apk_meta.py）
+]
 
 [project.optional-dependencies]
 google = ["google-api-python-client>=2.100", "google-auth>=2.23", "google-auth-httplib2>=0.1"]

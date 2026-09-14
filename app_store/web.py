@@ -18,6 +18,7 @@ import re
 import threading
 import time
 import urllib.request
+import uuid
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Dict, List
@@ -34,20 +35,16 @@ PLATFORM_VALUES = {p.value for p in Platform}
 
 PUBLISH_PLATFORMS = {p for p in PLATFORM_VALUES if p != "apple"}
 
-_lock = threading.Lock()
-
 # ---- 任务持久化 ----
 _HISTORY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config", "tasks_history.json")
 _HISTORY_MAX = 50
 
-import os as _os
-
-_TEMPLATE_DIR = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "templates")
+_TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "templates")
 
 
 def _load_index_html() -> str:
     """优先读外部模板文件；缺失回退内嵌。"""
-    p = _os.path.join(_TEMPLATE_DIR, "index.html")
+    p = os.path.join(_TEMPLATE_DIR, "index.html")
     try:
         return open(p, encoding="utf-8").read()
     except OSError:
@@ -118,21 +115,28 @@ def _play_store_icon(package_name: str) -> tuple:
 _BUILDS_GRACE_SECS = 24 * 3600  # 刚上传尚未绑定的文件保护期
 
 
+def _builds_root() -> str:
+    """安装包落盘根目录（上传与清理共用，避免两处路径不一致）。"""
+    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "builds")
+
+
 def _cleanup_unreferenced_builds(catalog) -> Dict[str, Any]:
     """删除 builds/{apk,aab}/ 下未被任何应用引用的安装包。
 
     只扫 builds/ 两个子目录（catalog 里可能引用 Downloads 等外部路径，绝不碰）；
     修改时间在保护期内的文件跳过（刚上传、尚未绑定到应用的新包不误删）。
     任何失败只跳过该文件，不影响调用方。
+    相对路径基准与 catalog.json 所在目录（catalog.base_dir）保持一致，
+    避免服务器从其他工作目录启动时误判引用、误删在用安装包。
     """
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    builds_root = os.path.join(root, "builds")
+    base_dir = str(getattr(catalog, "base_dir", "") or os.path.dirname(os.path.abspath(Handler.catalog_path)))
+    builds_root = _builds_root()
     refs = set()
     for a in catalog.all_apps():
         for f in ("apk_build", "aab_build"):
             v = str(a.get(f) or "").strip()
             if v:
-                refs.add(os.path.normpath(v if os.path.isabs(v) else os.path.join(root, v)))
+                refs.add(os.path.normpath(v if os.path.isabs(v) else os.path.join(base_dir, v)))
     removed, freed = [], 0
     now = time.time()
     for sub in ("apk", "aab"):
@@ -156,31 +160,88 @@ def _cleanup_unreferenced_builds(catalog) -> Dict[str, Any]:
     return {"removed": removed, "freed": freed}
 
 
+_BODY_MAX_BYTES = 10 * 1024 * 1024  # JSON 请求体上限（上传接口走 multipart，不受此限）
+
+
 def _read_body(handler: BaseHTTPRequestHandler) -> Dict[str, Any]:
-    length = int(handler.headers.get("Content-Length") or 0)
-    if length <= 0:
+    """读取 JSON 请求体；格式非法时抛 StoreError（由 do_POST 统一转成 400 JSON）。"""
+    raw_len = handler.headers.get("Content-Length") or "0"
+    try:
+        length = int(raw_len)
+    except (TypeError, ValueError):
+        raise StoreError(f"非法的 Content-Length: {raw_len}")
+    if length < 0:
+        raise StoreError("非法的 Content-Length")
+    if length > _BODY_MAX_BYTES:
+        raise StoreError(f"请求体过大（上限 {_BODY_MAX_BYTES // 1024 // 1024}MB）")
+    if length == 0:
         return {}
     try:
-        return json.loads(handler.rfile.read(length).decode("utf-8"))
-    except Exception:
-        return {}
+        data = json.loads(handler.rfile.read(length).decode("utf-8"))
+    except (ValueError, UnicodeDecodeError) as e:
+        raise StoreError(f"请求体不是合法 JSON: {e}")
+    if not isinstance(data, dict):
+        raise StoreError("请求体须为 JSON 对象")
+    return data
+
+
+_UPLOAD_MAX_BYTES = 1024 * 1024 * 1024  # 单文件上传上限 1GB（email 解析需整包读入内存）
+
+
+def _parse_multipart_upload(handler: BaseHTTPRequestHandler) -> tuple:
+    """解析 multipart/form-data 上传（cgi 模块已在 Python 3.13 移除，改用 email 解析）。
+
+    返回 (ftype, filename, file_bytes)；非法输入抛 StoreError。
+    """
+    from email.parser import BytesParser
+    from email.policy import default as email_policy
+
+    ctype = handler.headers.get("Content-Type", "")
+    if "multipart/form-data" not in ctype:
+        raise StoreError("Content-Type 须为 multipart/form-data")
+    raw_len = handler.headers.get("Content-Length") or "0"
+    try:
+        length = int(raw_len)
+    except (TypeError, ValueError):
+        raise StoreError(f"非法的 Content-Length: {raw_len}")
+    if length <= 0:
+        raise StoreError("上传内容为空")
+    if length > _UPLOAD_MAX_BYTES:
+        raise StoreError(f"文件过大（上限 {_UPLOAD_MAX_BYTES // 1024 // 1024}MB）")
+    body = handler.rfile.read(length)
+    # email 解析器需要完整报文：把 Content-Type 头拼回请求体前再解析
+    raw = b"Content-Type: " + ctype.encode("latin-1") + b"\r\n\r\n" + body
+    try:
+        msg = BytesParser(policy=email_policy).parsebytes(raw)
+    except Exception as e:
+        raise StoreError(f"上传解析失败: {e}")
+    ftype, filename, data = "", "", b""
+    for part in msg.iter_parts():
+        name = part.get_param("name", header="content-disposition") or ""
+        if name == "type":
+            ftype = (part.get_payload(decode=True) or b"").decode("utf-8", "replace").strip().lower()
+        elif name == "file":
+            filename = part.get_filename() or ""
+            data = part.get_payload(decode=True) or b""
+    if ftype not in ("aab", "apk"):
+        raise StoreError("缺少或错误的 type 参数（aab|apk）")
+    if not filename or not data:
+        raise StoreError("未收到文件")
+    return ftype, filename, data
 
 
 
 
 # ---- 任务系统（异步发布 + 进度）----
-import threading as _t
-import uuid as _u
-import time as _tm
-
-_task_lock = _t.Lock()
+_task_lock = threading.Lock()
 _TASKS: dict = {}
 _PENDING_PATHS: dict = {}
+_FINISHED_TASKS_MAX = 200  # 内存中最多保留的已完成任务条数（超出按完成时间淘汰最旧）
 
 
 def _history_path():
-    p = _os.path.abspath(_HISTORY_FILE)
-    _os.makedirs(_os.path.dirname(p), exist_ok=True)
+    p = os.path.abspath(_HISTORY_FILE)
+    os.makedirs(os.path.dirname(p), exist_ok=True)
     return p
 
 
@@ -215,13 +276,13 @@ def _save_history():
         tmp = _history_path() + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
             json.dump(items, f, ensure_ascii=False, indent=1)
-        _os.replace(tmp, _history_path())
+        os.replace(tmp, _history_path())
     except Exception:
         pass
 
 
 def _new_task(app_id, platform, dry_run, apk_path="", aab_path="", version_name=""):
-    tid = _u.uuid4().hex[:12]
+    tid = uuid.uuid4().hex[:12]
     with _task_lock:
         _TASKS[tid] = {
             "id": tid, "app_id": app_id, "platform": platform, "dry_run": dry_run,
@@ -237,7 +298,7 @@ def _new_task(app_id, platform, dry_run, apk_path="", aab_path="", version_name=
 
 
 def _step(tid, msg, level="info"):
-    ts = _tm.strftime("%H:%M:%S")
+    ts = time.strftime("%H:%M:%S")
     with _task_lock:
         if tid in _TASKS:
             _TASKS[tid]["steps"].append(f"[{ts}] {msg}")
@@ -249,7 +310,16 @@ def _update(tid, **kw):
             _TASKS[tid].update(kw)
             if kw.get("status") in ("done", "error", "killed"):
                 if not _TASKS[tid].get("finished_at"):
-                    _TASKS[tid]["finished_at"] = _tm.strftime("%Y-%m-%d %H:%M:%S")
+                    _TASKS[tid]["finished_at"] = time.strftime("%Y-%m-%d %H:%M:%S")
+                # 任务结束后参数已无用处，及时释放引用
+                _PENDING_PATHS.pop(tid, None)
+                # 已完成任务数量超上限时淘汰最旧的，避免内存无限增长
+                finished = [k for k, v in _TASKS.items()
+                            if v.get("status") in ("done", "error", "killed")]
+                if len(finished) > _FINISHED_TASKS_MAX:
+                    finished.sort(key=lambda k: _TASKS[k].get("finished_at", ""))
+                    for k in finished[: len(finished) - _FINISHED_TASKS_MAX]:
+                        _TASKS.pop(k, None)
     # _save_history 有自己的锁，在外部调用避免死锁
     if kw.get("status") in ("done", "error", "killed"):
         _save_history()
@@ -257,7 +327,7 @@ def _update(tid, **kw):
 
 def _pstep(tid: str, plat: str, msg: str, level: str = "info"):
     """按平台分组的步骤日志（并行发布时前端切换查看对应平台）。"""
-    ts = _tm.strftime("%H:%M:%S")
+    ts = time.strftime("%H:%M:%S")
     with _task_lock:
         t = _TASKS.get(tid)
         if t is not None:
@@ -392,10 +462,20 @@ def _publish_worker(tid: str):
             t = _TASKS.get(tid) or {}
             results = list(t.get("results") or [])
             errors = list(t.get("errors") or [])
-        _update(tid, status="done", progress=100, stage="全部完成" if not errors else "有错误",
+        # 汇总：errors 非空或任一平台返回 ok=False 都视为失败（含部分失败），
+        # 不能无条件标 done，否则前端会误显示「发布成功」
+        failed_n = len(errors) + sum(1 for r in results if not r.get("ok"))
+        ok_n = sum(1 for r in results if r.get("ok"))
+        if failed_n == 0:
+            final_status, final_stage = "done", "全部完成"
+        elif ok_n > 0:
+            final_status, final_stage = "error", "部分失败"
+        else:
+            final_status, final_stage = "error", "发布失败"
+        _update(tid, status=final_status, progress=100, stage=final_stage,
                 results=results, errors=errors)
-        if errors:
-            _step(tid, f"共 {len(errors)} 个错误", "error")
+        if failed_n:
+            _step(tid, f"共 {failed_n} 个平台失败", "error")
         else:
             _step(tid, "发布流程全部完成")
     except Exception as e:
@@ -457,10 +537,11 @@ class Handler(BaseHTTPRequestHandler):
     # ---- POST ----
     def do_POST(self):  # noqa: N802
         path = urlparse(self.path).path
-        if path == "/api/build/upload":
-            return self._api_build_upload()
-        body = _read_body(self)
         try:
+            if path == "/api/build/upload":
+                # 上传解析/校验失败也要返回 JSON 错误，不能让连接直接断开
+                return self._api_build_upload()
+            body = _read_body(self)
             if path == "/api/publish":
                 return self._api_publish(body)
             if path == "/api/status":
@@ -506,50 +587,30 @@ class Handler(BaseHTTPRequestHandler):
         浏览器 file input 拿不到本地绝对路径，所以通过上传方式把文件
         落到后端（127.0.0.1 本地，大文件也快），返回后端真实路径。
         multipart 表单字段：type = aab|apk, file = 文件
+        multipart 解析基于 email 模块（cgi 已在 Python 3.13 移除）；
+        需整包读入内存，因此有单文件大小上限（_UPLOAD_MAX_BYTES）。
         """
-        import cgi
-        import shutil
+        ftype, filename, data = _parse_multipart_upload(self)
 
-        try:
-            form = cgi.FieldStorage(
-                fp=self.rfile,
-                headers=self.headers,
-                environ={
-                    "REQUEST_METHOD": "POST",
-                    "CONTENT_TYPE": self.headers.get("Content-Type", ""),
-                },
+        ext = os.path.splitext(filename)[1].lower()
+        expected_ext = "." + ftype
+        if ext != expected_ext:
+            raise StoreError(
+                f"文件类型不匹配：type={ftype} 要求 {expected_ext} 文件，收到 {ext or '无扩展名'}"
             )
-        except Exception as e:
-            raise StoreError(f"上传解析失败: {e}")
-
-        ftype = (form.getvalue("type") or "").lower()
-        if ftype not in ("aab", "apk"):
-            raise StoreError("缺少或错误的 type 参数（aab|apk）")
-        if "file" not in form:
-            raise StoreError("未收到文件")
-        fileitem = form["file"]
-        if isinstance(fileitem, list):
-            fileitem = fileitem[0]
-        if not getattr(fileitem, "filename", None):
-            raise StoreError("未收到文件")
 
         # 安全文件名：取 basename，加时间戳防重名
-        safe_name = os.path.basename(fileitem.filename or f"upload.{ftype}")
-        ts = _tm.strftime("%Y%m%d%H%M%S")
+        safe_name = os.path.basename(filename or f"upload.{ftype}")
+        ts = time.strftime("%Y%m%d%H%M%S")
         stem, ext = os.path.splitext(safe_name)
         save_name = f"{stem}-{ts}{ext}" if ts else safe_name
 
-        builds_root = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "builds")
-        save_dir = os.path.join(builds_root, ftype)
+        save_dir = os.path.join(_builds_root(), ftype)
         os.makedirs(save_dir, exist_ok=True)
         save_path = os.path.abspath(os.path.join(save_dir, save_name))
 
-        # 流式写入（大文件避免整包读内存）
         with open(save_path, "wb") as out:
-            if hasattr(fileitem.file, "read"):
-                shutil.copyfileobj(fileitem.file, out, 1024 * 1024)
-            else:
-                out.write(fileitem.value if isinstance(fileitem.value, bytes) else b"")
+            out.write(data)
 
         return _json_response(self, {"ok": True, "type": ftype, "path": save_path, "name": save_name})
 
@@ -613,16 +674,35 @@ class Handler(BaseHTTPRequestHandler):
         app = self._catalog().get_app(app_id)
         icons_dir = os.path.join(os.path.dirname(os.path.abspath(self.catalog_path)), "icons")
         os.makedirs(icons_dir, exist_ok=True)
-        # 1) 本地缓存
-        for ext, ctype in _ICON_EXTS:
-            p = os.path.join(icons_dir, app_id + ext)
-            if os.path.isfile(p):
-                with open(p, "rb") as f:
-                    return _bytes_response(self, f.read(), ctype)
+        icon_ref = str(app.get("icon") or "").strip()
+        # 1) 本地缓存（sidecar 文件记录生成缓存时的 icon 配置；配置变更后旧缓存失效）
+        src_marker = os.path.join(icons_dir, app_id + ".src")
+        try:
+            with open(src_marker, "r", encoding="utf-8") as f:
+                cached_src = f.read().strip()
+        except OSError:
+            cached_src = None
+        if cached_src is not None and cached_src != icon_ref:
+            # icon 配置已变更：清除旧缓存与标记，走重新获取
+            for _e, _c in _ICON_EXTS:
+                try:
+                    os.remove(os.path.join(icons_dir, app_id + _e))
+                except OSError:
+                    pass
+            try:
+                os.remove(src_marker)
+            except OSError:
+                pass
+            cached_src = None
+        if cached_src is not None:
+            for ext, ct in _ICON_EXTS:
+                p = os.path.join(icons_dir, app_id + ext)
+                if os.path.isfile(p):
+                    with open(p, "rb") as f:
+                        return _bytes_response(self, f.read(), ct)
         # 2) 逐来源尝试
         errors: List[str] = []
         data, ctype = b"", ""
-        icon_ref = str(app.get("icon") or "").strip()
         if icon_ref:  # 显式配置优先
             try:
                 if icon_ref.startswith(("http://", "https://")):
@@ -660,10 +740,20 @@ class Handler(BaseHTTPRequestHandler):
                 errors.append(f"Play: {e}")
         if not data:
             raise StoreError("未找到应用图标（" + "; ".join(errors[:3]) + "）；可在 catalog 为应用配置 icon 字段（本地路径或 URL）")
-        # 3) 写缓存
+        # 3) 写缓存（先写临时文件再 os.replace 原子替换，避免并发读到半截文件）
         ext = next((e for e, t in _ICON_EXTS if t == ctype), ".png")
-        with open(os.path.join(icons_dir, app_id + ext), "wb") as f:
-            f.write(data)
+        cache_path = os.path.join(icons_dir, app_id + ext)
+        try:
+            tmp_path = cache_path + ".tmp"
+            with open(tmp_path, "wb") as f:
+                f.write(data)
+            os.replace(tmp_path, cache_path)
+            tmp_src = src_marker + ".tmp"
+            with open(tmp_src, "w", encoding="utf-8") as f:
+                f.write(icon_ref)
+            os.replace(tmp_src, src_marker)
+        except OSError:
+            pass  # 缓存写失败不影响本次响应
         return _bytes_response(self, data, ctype)
 
     def _api_tasks_clear(self):
@@ -730,7 +820,7 @@ class Handler(BaseHTTPRequestHandler):
             })
         _step(tid, "任务已创建，后台发布中...")
 
-        t = _t.Thread(target=_publish_worker, args=(tid,), daemon=True)
+        t = threading.Thread(target=_publish_worker, args=(tid,), daemon=True)
         t.start()
         _step(tid, "后台线程启动")
 
@@ -780,6 +870,8 @@ class Handler(BaseHTTPRequestHandler):
                 })
             except StoreError as e:
                 errors.append({"platform": key, "error": str(e)})
+            except Exception as e:  # 单平台未预期异常不丢已查到的其他平台结果
+                errors.append({"platform": key, "error": f"异常: {e}"})
         return _json_response(self, {"ok": not errors or bool(statuses), "app_id": app_id, "package": package, "statuses": statuses, "errors": errors})
 
 

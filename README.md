@@ -6,11 +6,11 @@
 > ⭐ 如果这个项目对你有帮助，可以顺手点个**Star**，非常感谢！🫶
 
 把同一个 App 一键发布到 **华为 AppGallery / OPPO / vivo / 小米 / 荣耀 / 腾讯应用宝 / Google Play**（+ 苹果只查版本），
-并随时查询**审核进度**与**已上架版本号**。内置 Web 看板，可视化操作。
+并随时查询**审核进度**与**已上架版本号**。内置 Web 看板，可视化操作（Apple 发布为实验性功能，默认只查版本）。
 
 ## 核心能力
 
-- **8 大平台全覆盖**：发布 + 查询（Apple 仅查询已上架版本）
+- **8 大平台全覆盖**：发布 + 查询（Apple 已实现 App Store Connect 提交审核，**实验性、未经真机实测**，默认仅用于查询已上架版本）
 - **统一发布模型**：一个应用配置 + 新 APK/AAB + 更新说明 → 选平台 → 一键发布
 - **平台多选发布**：Web 看板可按勾选平台发布（排除 Apple），支持「全部平台」
 - **定时上线**：小米/OPPO/vivo/荣耀/华为 均支持定时发布
@@ -18,14 +18,14 @@
 - **自动复用资料**：OPPO 更新版本时自动沿用现网图标/简介/截图，无需重传
 - **三态查询**：Google Play 区分「已上架 / 草稿未送审 / 审核中」
 - **状态看板**：Web 界面直观展示每个 App 在各平台的已上架版本，支持深色/浅色主题一键切换（自动记忆选择）；一键生成竖版「发布状态分享图」（自动带应用图标）并复制到剪贴板，可直接粘贴到微信/钉钉
-- **dry-run 安全校验**：先本地校验凭证、安装包、字段，不真实提交
+- **dry-run 安全校验**：不真实提交。注意行为差异：Google 会真实创建 edit 后立即删除、应用宝会调只读接口查线上版本，其余平台纯本地校验（见 [架构说明](docs/ARCHITECTURE.md)）
 
 ## 平台能力一览
 
 | 平台 | 查询 | 发布 | 定时上线 | 审核后立即上线 | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | Google Play | ✅ 三态 | ✅ | ❌ | ❌ | 发布需 **AAB**（APK 已不被接受）；可自动送审（勾选「Google 自动送审」）或存草稿后手动送审 |
-| Apple App Store | ✅ 版本 | ❌ | — | — | 只查询已上架版本（iTunes Lookup 公开接口） |
+| Apple App Store | ✅ 版本 | ⚠️ 实验性 | — | — | 查询走 iTunes Lookup 公开接口；`publish()` 已实现（App Store Connect 提交审核）但**未经真实发布实测**，谨慎使用 |
 | 小米应用商店 | ✅ | ✅ | ✅ | ❌ | X509 公钥 RSA 加密签名 |
 | OPPO 软件商店 | ✅ | ✅ | ✅ | ❌ | 更新自动复用现有发布资料 |
 | vivo 应用商店 | ✅ | ✅ | ✅ | ❌ | 上传 APK → 同步更新 |
@@ -118,16 +118,22 @@ appstore web --port 8090 --credentials config/credentials.json --catalog apps/ca
 # 打开 http://127.0.0.1:8090
 ```
 
+> ⚠️ **安全提示**：看板**没有任何登录鉴权**，任何能访问该端口的人都可以执行发布、上传安装包、查询/修改操作。
+> 请务必保持默认的 `--host 127.0.0.1`（仅本机访问）；如需局域网/公网访问，不要直接绑 `0.0.0.0`，
+> 应通过反向代理（Nginx 等）加访问鉴权后再暴露。
+
 看板上可：查看每个应用各平台已上架版本 / 选择平台一键发布 / 填版本号与更新说明 / 定时上线。
 
 ### 6. 命令行发布与查询
 
 ```bash
-# dry-run 校验（推荐先跑）
-appstore publish --app example-app --platform xiaomi,oppo --dry-run --credentials config/credentials.json
+# dry-run 校验（推荐先跑；--platform 每次只接受一个平台）
+appstore publish --app example-app --platform xiaomi --dry-run --credentials config/credentials.json
 
-# 真实发布（勾选多平台：小写平台名逗号分隔）
-appstore publish --app example-app --platform xiaomi,oppo,vivo --credentials config/credentials.json
+# 真实发布到多个平台：逐平台执行多次命令（CLI 不支持逗号多选，逗号多选仅 Web 看板/API 支持）
+appstore publish --app example-app --platform xiaomi --credentials config/credentials.json
+appstore publish --app example-app --platform oppo --credentials config/credentials.json
+appstore publish --app example-app --platform vivo --credentials config/credentials.json
 
 # 发布到所有已配置平台（不含 Apple）
 appstore publish --app example-app --all --credentials config/credentials.json

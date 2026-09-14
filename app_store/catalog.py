@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import json
 import os
+import tempfile
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -24,7 +26,16 @@ _CN_PLATFORMS = {"huawei", "oppo", "vivo", "xiaomi", "honor"}
 
 
 def _expand(p: str) -> str:
+    """显式传入的路径（如 CLI 参数）：相对路径以当前工作目录为基准。"""
     return os.path.abspath(os.path.expanduser(p))
+
+
+def _resolve(base: Path, p: str) -> str:
+    """catalog.json 内配置的路径：相对路径以 catalog 所在目录为基准，绝对路径原样。"""
+    p = os.path.expanduser(p)
+    if not os.path.isabs(p):
+        p = str(base / p)
+    return os.path.abspath(p)
 
 
 class AppCatalog:
@@ -66,12 +77,13 @@ class AppCatalog:
         latest = app.get("latest_build") or ""
         # 兼容：latest_build 按后缀分流
         if not aab and not apk and latest:
-            l_abs = _expand(latest)
+            l_abs = _resolve(self.base_dir, latest)
             if l_abs.lower().endswith(".apk"):
                 apk = latest
             else:
                 aab = latest
-        return {"aab": _expand(aab) if aab else "", "apk": _expand(apk) if apk else ""}
+        return {"aab": _resolve(self.base_dir, aab) if aab else "",
+                "apk": _resolve(self.base_dir, apk) if apk else ""}
 
     def artifact_for(self, app: Dict[str, Any], platform: str) -> str:
         """按平台选包：Google→AAB(缺则APK)，国内→APK(缺则AAB)。"""
@@ -115,6 +127,7 @@ class AppCatalog:
         vcode = version_code if version_code is not None else app.get("version_code")
         notes = release_notes or app.get("release_notes") or ""
         t = track or app.get("track") or "production"
+        otime = online_time if online_time is not None else app.get("online_time")
 
         return Release(
             package_name=package,
@@ -125,7 +138,7 @@ class AppCatalog:
             release_notes=notes,
             track=t,
             title=app.get("name") or "",
-            metadata={"app_id": app_id, "category": app.get("category", ""), "online_time": online_time,
+            metadata={"app_id": app_id, "category": app.get("category", ""), "online_time": otime,
                       "store_name_cn": app.get("store_name_cn") or ""},
         )
 
@@ -136,27 +149,38 @@ class AppCatalog:
         unknown = set(fields) - allowed
         if unknown:
             raise StoreError(f"不支持的字段: {', '.join(sorted(unknown))}")
-        for cat in self.data.get("categories", []):
-            for app in cat.get("apps", []):
-                if app.get("id") == app_id:
-                    for k, v in fields.items():
-                        if v == "" or v is None:
-                            app.pop(k, None)
-                        else:
-                            app[k] = v
-                    self._save()
-                    return self.get_app(app_id)
+        # 读-改-写整体加锁，避免多线程（如 Web 并发请求）交错写坏 catalog
+        with _catalog_lock:
+            for cat in self.data.get("categories", []):
+                for app in cat.get("apps", []):
+                    if app.get("id") == app_id:
+                        for k, v in fields.items():
+                            if v == "" or v is None:
+                                app.pop(k, None)
+                            else:
+                                app[k] = v
+                        self._save()
+                        return self.get_app(app_id)
         raise StoreError(f"目录中找不到应用: {app_id}")
 
     def _save(self) -> None:
-        tmp = self.path.with_suffix(".json.tmp")
-        tmp.write_text(json.dumps(self.data, ensure_ascii=False, indent=2), encoding="utf-8")
-        os.replace(tmp, self.path)
+        # 同目录唯一临时文件 + os.replace 原子替换；异常时尽力清理临时文件
+        fd, tmp_name = tempfile.mkstemp(prefix=self.path.name + ".", suffix=".tmp", dir=str(self.path.parent))
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(json.dumps(self.data, ensure_ascii=False, indent=2))
+            os.replace(tmp_name, self.path)
+        except BaseException:
+            try:
+                os.unlink(tmp_name)
+            except OSError:
+                pass
+            raise
 
-    def detect_local_builds(self, paths: Optional[List[str]] = None) -> Dict[str, List[str]]:
+    def detect_local_builds(self, paths: Optional[List[str]] = None) -> Dict[str, List[Dict[str, Any]]]:
         """扫描常见目录找出可用的 AAB/APK（用于前端文件选择器）。"""
         base = [self.base_dir, Path.home() / "Downloads"]
-        found: Dict[str, List[str]] = {"aab": [], "apk": []}
+        found: Dict[str, List[Dict[str, Any]]] = {"aab": [], "apk": []}
         for d in base:
             if not d.is_dir():
                 continue
@@ -168,8 +192,8 @@ class AppCatalog:
                 entry = {"path": str(p), "name": p.name, "size": size, "mtime": p.stat().st_mtime}
                 key = "aab" if p.suffix.lower() == ".aab" else "apk"
                 found[key].append(entry)
-            for key in found:
-                found[key].sort(key=lambda e: e["mtime"], reverse=True)
+        for key in found:
+            found[key].sort(key=lambda e: e["mtime"], reverse=True)
         return found
 
     def status_payload(self, app_id: str) -> Dict[str, Any]:
@@ -197,10 +221,13 @@ class AppCatalog:
 
 
 _cached: Optional[AppCatalog] = None
+_catalog_lock = threading.Lock()
 
 
 def get_catalog(path: str = DEFAULT_CATALOG) -> AppCatalog:
     global _cached
-    if _cached is None or str(_cached.path) != str(Path(path).expanduser()):
-        _cached = AppCatalog(path)
-    return _cached
+    # 单例的惰性初始化加锁，避免多线程下重复构造/覆盖
+    with _catalog_lock:
+        if _cached is None or str(_cached.path) != str(Path(path).expanduser()):
+            _cached = AppCatalog(path)
+        return _cached

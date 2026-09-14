@@ -22,6 +22,8 @@ _PLATFORM_MODULES = {
 }
 
 _REGISTRY: Dict[str, Type[StoreAdapter]] = {}
+# 平台适配器模块加载失败的非依赖原因（ImportError 属可选依赖缺失，静默跳过）
+_LOAD_ERRORS: Dict[str, str] = {}
 
 
 def _load_all() -> None:
@@ -30,7 +32,12 @@ def _load_all() -> None:
             continue
         try:
             mod = importlib.import_module(module)
-        except Exception:
+        except ImportError:
+            # 可选依赖未安装（如 google-api-python-client），静默跳过
+            continue
+        except Exception as e:
+            # 模块自身代码错误等，记录真实原因以便排查
+            _LOAD_ERRORS[key] = f"{type(e).__name__}: {e}"
             continue
         for obj in vars(mod).values():
             if (
@@ -48,7 +55,11 @@ def get_adapter(platform: object, credentials: Dict[str, Any]) -> StoreAdapter:
     key = platform.value if isinstance(platform, Platform) else str(platform).lower()
     cls = _REGISTRY.get(key)
     if cls is None:
-        raise StoreError(f"平台未注册或加载失败: {key}")
+        reason = _LOAD_ERRORS.get(key)
+        msg = f"平台未注册或加载失败: {key}"
+        if reason:
+            msg += f"（{reason}）"
+        raise StoreError(msg)
     return cls(credentials.get(key) or {})
 
 
@@ -62,7 +73,7 @@ def list_platforms() -> List[Dict[str, Any]]:
         items.append(
             {
                 "platform": p.value,
-                "display_name": p.display_name,
+                "display_name": getattr(cls, "display_name", None) or p.display_name,
                 "availability": getattr(cls, "availability", "ready"),
                 "credential_fields": list(getattr(cls, "required_credential_fields", ())),
             }

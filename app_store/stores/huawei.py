@@ -15,9 +15,10 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import threading
 import time
 import urllib.parse
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Tuple
 
 from ..base import StoreAdapter, StoreError
 from ..models import AuditState, Platform, Release, SubmitResult, StoreStatus, utcnow_iso
@@ -37,43 +38,75 @@ class HuaweiAdapter(StoreAdapter):
         self._apps = self.credentials.get("apps") or {}
         self._cid = self.credentials.get("client_id") or ""
         self._csec = self.credentials.get("client_secret") or ""
+        # OAuth token 缓存：pkg -> (token, 过期时间戳)，加锁保证并发安全
+        self._token_cache: Dict[str, Tuple[str, float]] = {}
+        self._token_lock = threading.Lock()
 
     def _cred_for(self, pkg: str) -> dict:
         if self._apps:
             c = self._apps.get(pkg) or {}
+            # 兼容 apps[pkg] 直接写 client_id 字符串的简写形式
+            if isinstance(c, str):
+                c = {"client_id": c, "client_secret": self._csec}
             if not c.get("client_id"):
                 raise StoreError(f"华为凭证 apps 中没有 {pkg}")
             return c
         return {"client_id": self._cid, "client_secret": self._csec}
 
-    def _token(self, pkg: str) -> str:
-        import requests
-        cred = self._cred_for(pkg)
-        r = requests.post(
-            f"{_DOMAIN}/api/oauth2/v1/token",
-            json={
-                "grant_type": "client_credentials",
-                "client_id": cred.get("client_id"),
-                "client_secret": cred.get("client_secret"),
-            },
-            timeout=30,
-        )
-        d = r.json()
-        tok = d.get("access_token")
-        if not tok:
-            raise StoreError(f"华为 OAuth 失败: {d}")
-        return tok
+    # token 过期前提前续期的余量（秒）
+    _TOKEN_REFRESH_MARGIN = 60
 
-    def _headers(self, pkg: str) -> dict:
+    def _token(self, pkg: str, force_refresh: bool = False) -> str:
+        import requests
+        now = time.time()
+        with self._token_lock:
+            if not force_refresh:
+                cached = self._token_cache.get(pkg)
+                # 命中缓存且距过期还有余量时直接复用
+                if cached and cached[1] - now > self._TOKEN_REFRESH_MARGIN:
+                    return cached[0]
+            cred = self._cred_for(pkg)
+            r = requests.post(
+                f"{_DOMAIN}/api/oauth2/v1/token",
+                json={
+                    "grant_type": "client_credentials",
+                    "client_id": cred.get("client_id"),
+                    "client_secret": cred.get("client_secret"),
+                },
+                timeout=30,
+            )
+            try:
+                d = r.json()
+            except Exception:
+                raise StoreError(f"华为 OAuth 返回非JSON: HTTP {r.status_code} {r.text[:200]}")
+            tok = d.get("access_token")
+            if not tok:
+                # 只保留错误码/描述，不把整个响应体（可能含敏感字段）写进异常
+                err = d.get("error") or d.get("ret", {}).get("code") or f"HTTP {r.status_code}"
+                desc = d.get("error_description") or d.get("sub_error") or ""
+                raise StoreError(f"华为 OAuth 失败: [{err}] {desc}".strip())
+            # 华为 token 默认 1 小时有效，按返回的 expires_in 记录过期时间
+            try:
+                expires_in = int(d.get("expires_in") or 3600)
+            except (ValueError, TypeError):
+                expires_in = 3600
+            self._token_cache[pkg] = (tok, now + expires_in)
+            return tok
+
+    def _headers(self, pkg: str, force_refresh: bool = False) -> dict:
         return {
             "client_id": self._cred_for(pkg)["client_id"],
-            "Authorization": "Bearer " + self._token(pkg),
+            "Authorization": "Bearer " + self._token(pkg, force_refresh=force_refresh),
         }
 
     def _get(self, path: str, params: dict, pkg: str) -> dict:
         import requests
         r = requests.get(_DOMAIN + path, params=params, headers=self._headers(pkg), timeout=30)
-        d = r.json()
+        if r.status_code == 401:
+            # token 失效：强制刷新后重试一次
+            r = requests.get(_DOMAIN + path, params=params,
+                             headers=self._headers(pkg, force_refresh=True), timeout=30)
+        d = self._parse_json(r, path)
         if d.get("ret", {}).get("code") != 0:
             raise StoreError("华为 " + path + ": " + str(d))
         return d
@@ -84,7 +117,10 @@ class HuaweiAdapter(StoreAdapter):
         if query:
             url += "?" + urllib.parse.urlencode(query)
         r = requests.post(url, json=body, headers=self._headers(pkg), timeout=60)
-        d = r.json()
+        if r.status_code == 401:
+            r = requests.post(url, json=body,
+                              headers=self._headers(pkg, force_refresh=True), timeout=60)
+        d = self._parse_json(r, path)
         if d.get("ret", {}).get("code") != 0:
             raise StoreError("华为 " + path + ": " + str(d))
         return d
@@ -96,10 +132,23 @@ class HuaweiAdapter(StoreAdapter):
         if query:
             url += "?" + urllib.parse.urlencode(query)
         r = requests.put(url, json=body, headers=self._headers(pkg), timeout=60)
-        d = r.json()
+        if r.status_code == 401:
+            r = requests.put(url, json=body,
+                             headers=self._headers(pkg, force_refresh=True), timeout=60)
+        d = self._parse_json(r, path)
         if d.get("ret", {}).get("code") != 0:
             raise StoreError("华为 " + path + ": " + str(d))
         return d
+
+    @staticmethod
+    def _parse_json(r, path: str) -> dict:
+        """校验 HTTP 状态码并解析 JSON，失败统一包装为 StoreError。"""
+        if r.status_code >= 400:
+            raise StoreError(f"华为 {path}: HTTP {r.status_code} {r.text[:200]}")
+        try:
+            return r.json()
+        except Exception:
+            raise StoreError(f"华为 {path} 返回非JSON: HTTP {r.status_code} {r.text[:200]}")
 
     def _submit_with_retry(self, path: str, pkg: str, query: dict = None,
                            max_attempts: int = 8, interval: int = 30) -> dict:
@@ -126,8 +175,9 @@ class HuaweiAdapter(StoreAdapter):
             if code == 0:
                 return d
             msg = str(ret.get("msg", "") or ret.get("message", "")).lower()
-            # 解析中/编译中 → 重试
-            parsing = (code in (204144660, 204144727)) and (
+            # 解析中/编译中 → 重试；msg 为空时仅按错误码兜底判定（华为偶发不带 msg）
+            parsing = code in (204144660, 204144727) and (
+                not msg or
                 "parsing" in msg or "parse" in msg or "解析" in msg or
                 "compil" in msg or "编译" in msg or "try again" in msg
             )
@@ -405,7 +455,7 @@ class HuaweiAdapter(StoreAdapter):
         if scb: scb("提交发布到华为 AppGallery…")
         meta = release.metadata or {}
         submit_query = {"appId": app_id, "releaseType": 1}
-        ot = meta.get("online_time") or release.metadata.get("online_time")
+        ot = meta.get("online_time")
         if ot:
             import datetime as _dt
             try:
@@ -416,7 +466,9 @@ class HuaweiAdapter(StoreAdapter):
                     ot_int = int(dt.timestamp() * 1000)
                 except (ValueError, TypeError):
                     raise StoreError(f"online_time 格式错误: {ot!r}")
-            submit_query["releaseTime"] = _dt.datetime.fromtimestamp(ot_int / 1000).strftime(
+            # 华为 releaseTime 要求北京时间(+0800)，显式指定 UTC+8 时区，不依赖本地时区
+            _tz8 = _dt.timezone(_dt.timedelta(hours=8))
+            submit_query["releaseTime"] = _dt.datetime.fromtimestamp(ot_int / 1000, tz=_tz8).strftime(
                 "%Y-%m-%dT%H:%M:%S+0800"
             )
         payload = self._submit_with_retry("/api/publish/v2/app-submit", pkg, query=submit_query)
@@ -455,11 +507,13 @@ class HuaweiAdapter(StoreAdapter):
             raise StoreError(f"华为未找到 {pkg} 的 appId")
 
         import datetime as _dt
+        # releaseTime 用北京时间(+0800)，显式指定时区，不依赖本地时区
+        _tz8 = _dt.timezone(_dt.timedelta(hours=8))
         body = {
             "changeType": 2,  # 指定时间上架 → 审核通过立即上架
             # releaseTime 标记必选但 changeType=2 时以官方说明"changeType为3时有效"为准，
             # 这里传当前时间占位，避免部分网关强校验缺参
-            "releaseTime": _dt.datetime.now().strftime("%Y-%m-%dT%H:%M:%S+0800"),
+            "releaseTime": _dt.datetime.now(tz=_tz8).strftime("%Y-%m-%dT%H:%M:%S+0800"),
             "releaseType": 1,  # 全网（目前仅支持全网）
         }
         self._put("/api/publish/v2/on-shelf-time", pkg, query={"appId": app_id}, body=body)

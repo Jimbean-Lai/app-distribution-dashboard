@@ -1,7 +1,7 @@
 
 """App Store（苹果）适配器：查询 + 发布（通过 App Store Connect API）。
 
-查询：抓取 apps.apple.com 网页解析当前版本（iTunes Lookup CDN 缓存不可靠）。
+查询：iTunes Lookup 公开接口为主，版本号再抓 apps.apple.com 页面校准（Lookup CDN 缓存可能滞后）。
 发布（提交审核）：使用 App Store Connect API（基于 .p8 私钥 JWT 认证），
 参考 GitHub 上普遍使用的 ES256 JWT + REST API 方案。
 
@@ -33,6 +33,7 @@ import base64
 import json
 import os
 import re
+import sys
 import time
 import urllib.parse
 import urllib.request
@@ -248,15 +249,21 @@ class AppleAdapter(StoreAdapter):
             raise StoreError(f"App Store Connect API 请求失败: {e}")
 
     def _get_app_store_version_id(self, apple_app_id: str, version_string: str) -> Optional[str]:
-        """查找已有 App Store 版本（用于更新已有版本而非创建新版本）。"""
-        try:
-            data = self._asc_request("GET", f"/apps/{apple_app_id}/appStoreVersions")
+        """查找已有 App Store 版本（用于更新已有版本而非创建新版本）。
+
+        分页跟随 links.next 翻页（limit=200）；确实不存在返回 None，
+        StoreError / 网络错误向上抛，不静默吞掉。
+        """
+        path: Optional[str] = f"/apps/{apple_app_id}/appStoreVersions?limit=200"
+        while path:
+            data = self._asc_request("GET", path)
             for v in data.get("data", []):
                 attrs = v.get("attributes", {})
                 if attrs.get("versionString") == version_string:
                     return v["id"]
-        except Exception:
-            pass
+            nxt = (data.get("links") or {}).get("next") or ""
+            # links.next 为绝对 URL，转回 _asc_request 接受的相对路径
+            path = nxt[len(_ASC_BASE):] if nxt.startswith(_ASC_BASE) else None
         return None
 
     def publish(self, release: Release, dry_run: bool = False) -> SubmitResult:
@@ -352,29 +359,27 @@ class AppleAdapter(StoreAdapter):
     def _find_build(self, apple_app_id: str, version_str: str) -> Optional[str]:
         """按版本号查找匹配的构建。
 
-        先精确匹配 versionString；失败则尝试 BEGINS_WITH。
+        先精确匹配 versionString；失败则尝试 preReleaseVersion 匹配。
+        仅「确实不存在」返回 None；StoreError / 网络错误向上抛，不静默吞掉。
         """
-        try:
-            # 精确匹配
-            build_data = self._asc_request(
-                "GET",
-                f"/builds?filter[app]={apple_app_id}&filter[version]={version_str}"
-                f"&filter[processingState]=VALID&limit=5",
-            )
-            builds = build_data.get("data", [])
-            if builds:
-                return builds[0]["id"]
-            # 试试前缀匹配（如 "4.19" 匹配 "4.19.1"）
-            data2 = self._asc_request(
-                "GET",
-                f"/builds?filter[app]={apple_app_id}&filter[preReleaseVersion.version]={version_str}"
-                f"&limit=5",
-            )
-            builds = data2.get("data", [])
-            if builds:
-                return builds[0]["id"]
-        except StoreError:
-            pass
+        # 精确匹配
+        build_data = self._asc_request(
+            "GET",
+            f"/builds?filter[app]={apple_app_id}&filter[version]={version_str}"
+            f"&filter[processingState]=VALID&limit=5",
+        )
+        builds = build_data.get("data", [])
+        if builds:
+            return builds[0]["id"]
+        # 试试前缀匹配（如 "4.19" 匹配 "4.19.1"）
+        data2 = self._asc_request(
+            "GET",
+            f"/builds?filter[app]={apple_app_id}&filter[preReleaseVersion.version]={version_str}"
+            f"&limit=5",
+        )
+        builds = data2.get("data", [])
+        if builds:
+            return builds[0]["id"]
         return None
 
     def _set_version_localization(self, version_id: str, whats_new: str) -> None:
@@ -430,5 +435,10 @@ class AppleAdapter(StoreAdapter):
         try:
             self._asc_request("POST", "/reviewSubmissionItems", body=item_body)
         except Exception as e:
+            # 添加审核项目失败：尝试删除已创建的 reviewSubmission，避免平台侧残留空提交
+            try:
+                self._asc_request("DELETE", f"/reviewSubmissions/{sub_id}")
+            except Exception as de:
+                print(f"Apple 清理 reviewSubmission {sub_id} 失败: {de}", file=sys.stderr)
             # 有些情况下必须先用 PATCH 设置 appStoreVersion 的 earliestReleaseDate / releaseType
             raise StoreError(f"Apple 添加审核项目失败: {e}")

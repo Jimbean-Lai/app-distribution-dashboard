@@ -70,7 +70,8 @@ class QQAdapter(StoreAdapter):
 
     def _api(self, path: str, params: Dict[str, Any], timeout: int = 60) -> Dict[str, Any]:
         import requests as req
-        data = {k: ("" if v is None else str(v)) for k, v in params.items()}
+        # None 参数不参与签名也不发送（与头部签名规则"值为 null 不参与"一致），而非转空串
+        data = {k: str(v) for k, v in params.items() if v is not None}
         data["user_id"] = self._user_id
         data["timestamp"] = str(int(time.time()))
         data["sign"] = self._sign(data)
@@ -142,14 +143,17 @@ class QQAdapter(StoreAdapter):
         if pc:
             body = ProgressFile(apk, fs, pc)
             try:
+                # 显式 Content-Length：ProgressFile 无 __len__，requests 无法自动推断长度
                 resp = req.put(pre_sign_url, data=body,
-                               headers={"Content-Type": "application/octet-stream"}, timeout=1800)
+                               headers={"Content-Type": "application/octet-stream",
+                                        "Content-Length": str(fs)}, timeout=1800)
             finally:
                 body.close()
         else:
             with open(apk, "rb") as f:
                 resp = req.put(pre_sign_url, data=f,
-                               headers={"Content-Type": "application/octet-stream"}, timeout=1800)
+                               headers={"Content-Type": "application/octet-stream",
+                                        "Content-Length": str(fs)}, timeout=1800)
         if resp.status_code != 200:
             raise StoreError(f"应用宝 COS 上传失败: HTTP {resp.status_code} {resp.text[:200]}")
 

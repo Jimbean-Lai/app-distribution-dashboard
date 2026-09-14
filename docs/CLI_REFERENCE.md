@@ -51,7 +51,7 @@ appstore validate --credentials config/credentials.json
 发布/更新应用到目标平台。
 
 ```bash
-appstore publish [--app APP_ID] [--platform PLATFORM(S)] [--all]
+appstore publish [--app APP_ID] [--platform PLATFORM] [--all]
                  [--credentials CREDENTIALS] [--dry-run]
                  [--version-name VN] [--version-code VC]
                  [--release-notes NOTES] [--online-time TIME]
@@ -63,10 +63,10 @@ appstore publish [--app APP_ID] [--platform PLATFORM(S)] [--all]
 | 参数 | 说明 |
 | --- | --- |
 | `--app` | 应用目录 ID（`appstore apps` 查看） |
-| `--platform` | 目标平台，支持**逗号多选**如 `xiaomi,oppo,vivo`（排除 apple） |
+| `--platform` | 目标平台（单选，如 `xiaomi`；**不支持逗号多选**，多平台请逐平台执行或用 `--all`） |
 | `--all` | 发布到 credentials 中所有已配平台（不含 apple） |
 | `--credentials` | 凭证路径（默认 `config/credentials.json`） |
-| `--dry-run` | 仅做本地校验，不发起真实 API 请求 |
+| `--dry-run` | 安全校验不真实提交。注意各平台行为不同：Google 会真实创建 edit 后立即删除；应用宝会调只读接口查线上版本；其余平台仅本地校验（详见 [ARCHITECTURE.md](ARCHITECTURE.md) 的 dry-run 章节） |
 | `--version-name` | 覆盖版本名（如 `1.0.1`） |
 | `--version-code` | 覆盖 versionCode（数字） |
 | `--release-notes` | 更新说明 |
@@ -79,10 +79,12 @@ appstore publish [--app APP_ID] [--platform PLATFORM(S)] [--all]
 
 ```bash
 # dry-run 验证（始终推荐先跑）
-appstore publish --app example-app --platform xiaomi,oppo --dry-run
+appstore publish --app example-app --platform xiaomi --dry-run
 
-# 多平台真实发布
-appstore publish --app example-app --platform xiaomi,oppo,vivo
+# 多平台真实发布：逐平台执行（--platform 不支持逗号多选；逗号多选仅 Web 看板 / HTTP API 支持）
+appstore publish --app example-app --platform xiaomi
+appstore publish --app example-app --platform oppo
+appstore publish --app example-app --platform vivo
 
 # 全部已配平台
 appstore publish --app example-app --all
@@ -139,7 +141,7 @@ appstore web [--port PORT] [--host HOST]
 | 参数 | 说明 |
 | --- | --- |
 | `--port` | 监听端口（默认 8090） |
-| `--host` | 监听地址（默认 127.0.0.1） |
+| `--host` | 监听地址（默认 127.0.0.1）。**看板无鉴权**，绑 `0.0.0.0` 会让网内任何人都能发布/上传/改配置，公网暴露请走反向代理加鉴权 |
 | `--credentials` | 凭证路径 |
 | `--catalog` | 应用目录路径 |
 | `--open` | 自动打开浏览器 |

@@ -107,17 +107,27 @@ class XiaomiAdapter(StoreAdapter):
 
     def _post(self, url: str, data: Dict[str, str], files: Any = None) -> Dict[str, Any]:
         import requests
-        resp = requests.post(url, data=data, files=files, timeout=300)
+        try:
+            resp = requests.post(url, data=data, files=files, timeout=300)
+        except (requests.ConnectionError, requests.Timeout) as e:
+            raise StoreError(f"小米接口网络错误 {url}: {e}")
         try:
             payload = resp.json()
         except Exception:
             raise StoreError(f"小米接口返回非 JSON (HTTP {resp.status_code}): {resp.text[:300]}")
-        # 小米返回约定 code==900? 以文档为准；这里保守解析
         return payload
 
     def publish(self, release: Release, dry_run: bool = False) -> SubmitResult:
         scb = (release.metadata or {}).get("_step_cb")
         if dry_run:
+            # dry-run 本地校验：凭证字段齐全（含公钥证书）+ 安装包存在
+            cred = self._cred_for(release.package_name)
+            if not cred.get("email") or not cred.get("password"):
+                raise StoreError(f"小米 dry-run：{release.package_name} 缺 email/password")
+            self._cert_path(release.package_name)
+            apk = release.apk_path
+            if not apk or not os.path.isfile(apk):
+                raise StoreError(f"小米 dry-run：APK 不存在: {apk}")
             return SubmitResult(
                 platform=self.platform, ok=True,
                 message="小米: dry-run 校验通过（未真实调用）",
@@ -133,14 +143,18 @@ class XiaomiAdapter(StoreAdapter):
         email = cred.get("email") or ""
         password = cred.get("password") or ""
 
-        synchro_type = int(release.metadata.get("synchroType", 1)) if release.metadata else 1
+        try:
+            synchro_type = int(release.metadata.get("synchroType", 1)) if release.metadata else 1
+        except (TypeError, ValueError) as e:
+            raise StoreError(
+                f"小米 synchroType 无法转为整数: {release.metadata.get('synchroType')!r} ({e})")
         app_detail: Dict[str, Any] = release.metadata.get("appDetail", {}) if release.metadata else {}
         app_detail.setdefault("appName", (release.metadata or {}).get("store_name_cn") or release.title or release.package_name)
         app_detail.setdefault("packageName", release.package_name)
         app_detail.setdefault("versionName", release.version_name or "")
         if release.release_notes:
             app_detail["updateDesc"] = release.release_notes
-        # 定时上线（支持毫秒时间戳或 'YYYY-MM-DDTHH:MM'/'YYYY-MM-DD HH:MM' 字符串）
+        # 定时上线（支持毫秒时间戳或 'YYYY-MM-DDTHH:MM'/'YYYY-MM-DD HH:MM' 字符串，按东八区解析）
         import datetime as _dt
         ot = (release.metadata or {}).get("online_time") or (release.metadata or {}).get("onlineTime")
         if ot:
@@ -149,6 +163,7 @@ class XiaomiAdapter(StoreAdapter):
             except (ValueError, TypeError):
                 try:
                     parsed = _dt.datetime.strptime(str(ot).replace("T", " ")[:16], "%Y-%m-%d %H:%M")
+                    parsed = parsed.replace(tzinfo=_dt.timezone(_dt.timedelta(hours=8)))
                     ot_ms = int(parsed.timestamp() * 1000)
                 except (ValueError, TypeError):
                     raise StoreError(f"online_time 无法解析（毫秒或 YYYY-MM-DD[THH:MM]）：{ot!r}")
@@ -186,18 +201,24 @@ class XiaomiAdapter(StoreAdapter):
                     ("apk", (os.path.basename(apk), f, "application/octet-stream")),
                 ]
                 body = make_multipart_monitor(fields, file_size, pc)
-                resp = _req.post(PUSH_URL, data=body, headers={"Content-Type": body.content_type}, timeout=300)
+                try:
+                    resp = _req.post(PUSH_URL, data=body, headers={"Content-Type": body.content_type}, timeout=300)
+                except (_req.ConnectionError, _req.Timeout) as e:
+                    raise StoreError(f"小米上传网络错误: {e}")
             finally:
                 f.close()
-            payload = resp.json() if resp.headers.get("content-type", "").startswith("application/json") else {}
+            try:
+                payload = resp.json()
+            except Exception:
+                raise StoreError(f"小米上传返回非 JSON (HTTP {resp.status_code}): {resp.text[:300]}")
         else:
             with open(apk, "rb") as f:
                 files: Dict[str, Any] = {"apk": (os.path.basename(apk), f)}
                 payload = self._post(PUSH_URL, data=req_data, files=files)
 
         if scb: scb("小米发布完成")
-        # 小米 push 返回 result=0 表示成功（非 code）
-        ok = payload.get("result") in (0, "0", 200, "200", 900, "900") or payload.get("code") in (0, "0", 200, "200", 900, "900")
+        # 小米 push 成功码以文档明确的 result=0 为准（其余历史兼容码已收窄，避免误判成功）
+        ok = payload.get("result") in (0, "0")
         return SubmitResult(
             platform=self.platform,
             ok=ok,
@@ -223,14 +244,14 @@ class XiaomiAdapter(StoreAdapter):
             QUERY_URL,
             data={"RequestData": json.dumps(request_data, ensure_ascii=False), "SIG": encrypted},
         )
-        # 小米返回：result=0 成功，packageInfo 内含线上版本
-        ok = payload.get("result") in (0, "0", 200, "200", 900, "900")
+        # 小米返回：result=0 成功（文档明确的成功码），packageInfo 内含线上版本
+        ok = payload.get("result") in (0, "0")
         info = payload.get("packageInfo") or {}
         version = info.get("versionName") or ""
         vcode = info.get("onlineVersionCode") or info.get("versionCode")
         names = [str(version)] if version else []
         codes = [int(vcode)] if vcode not in (None, "", 0) else []
-        state = AuditState.PUBLISHED if version else (AuditState.UNKNOWN if ok else AuditState.UNKNOWN)
+        state = AuditState.PUBLISHED if version else AuditState.UNKNOWN
         # 小米 dev/query 无审核状态字段；"查询成功"等操作信息不写入状态
         msg = payload.get("message") or ""
         if msg in ("查询成功", "成功", ""):

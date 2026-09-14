@@ -134,7 +134,7 @@ label{display:block;color:var(--mut);font-size:11px;margin:8px 0 3px}
 <script>
 var ST={apps:[],cats:[],cur:null,plt:[],POLL:null};
 function $(v){return document.getElementById(v)}
-function esc(s){return String(s==null?"":s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 function api(p,o){return fetch(p,o).then(function(r){return r.json().catch(function(){return{}})})}
 function toast(m,t){var e=$("toast");e.style.display="flex";e.innerHTML='<div class="modal" style="width:auto;max-width:400px;text-align:center">'+esc(m)+'<div style="margin-top:12px"><button id=tb>确定</button></div></div>';e.style.background="transparent";clearTimeout(e._t);e._t=setTimeout(close,2600);var b=e.querySelector('#tb');if(b)b.addEventListener('click',close)}
 function close(){ $("toast").style.display="none" }
@@ -223,7 +223,7 @@ $("tmeta").innerHTML=(targets.length?'<span class="tlabel">发布平台</span>':
   return '<span class="'+cls+'" onclick="selTPlat(\''+esc(p)+'\')">'+esc(p)+mark+"</span>"}).join("");
 // === 当前阶段：选中平台显示其状态，否则显示整体 ===
 if(t.status==="done"){$("tstage").textContent="✅ 全部完成"}
-else if(t.status==="error"){$("tstage").textContent="❌ 有错误"}
+else if(t.status==="error"){$("tstage").textContent="❌ "+(t.stage||"有错误")}
 else if(sel){var st2=pst[sel];$("tstage").textContent=st2==="done"?"✅ "+sel+" 完成":st2==="error"?"❌ "+sel+" 失败":"⚡ "+sel+" 发布中"}
 else{$("tstage").textContent=t.stage||"处理中…"}
 // === 上传字节进度：选中平台显示其上传；未选中自动跟随正在活跃上传的平台（并行时取进度最低者，带平台名前缀）===
@@ -252,7 +252,7 @@ function selTPlat(p){ST.TSEL=(ST.TSEL===p?"":p);if(ST.LASTT)renderTask(ST.LASTT)
 function poll(){if(!ST.POLL)return;api("/api/tasks/"+ST.POLL).then(function(t){if(t.error){lg("查询失败","err");stopPoll();return}
 renderTask(t)
 // === 任务结束：日志 + 手动关闭 × ===
-if(t.status==="done"||t.status==="error"){var isOk=t.status==="done";
+if(t.status==="done"||t.status==="error"){var isOk=t.status==="done"&&!(t.errors||[]).length&&!(t.results||[]).some(function(v){return !v.ok});
 $("tclose").style.display="inline-block";$("tclose").onclick=function(){stopPoll()};
 lg("== "+(isOk?"✔ 发布成功":"✘ 发布有错误")+" ==",isOk?"ok":"err");
 (t.results||[]).forEach(function(v){lg("["+v.platform+"] "+(v.ok?"✓ ":"✗ ")+v.message,v.ok?"ok":"err")});
@@ -346,7 +346,7 @@ if(blob&&navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem){
 navigator.clipboard.write([new ClipboardItem({"image/png":blob})]).then(okToast,fb)}else fb()},"image/png")}catch(e){fb()}
 lg("已生成分享图片（"+rows.length+" 个平台）","ok")}
 function historyRecordVersion(t){if(t.version_name)return t.version_name;var m=((t.steps||[]).join(" ").match(/ v(\d+(?:\.\d+)+)/));return m?m[1]:""}
-function historyRowsHTML(hist){var h="";(hist||[]).forEach(function(t){var st=t.status==="done"?"ok":"err";var dn=(t.dry_run?" (dry-run)":"");var v=historyRecordVersion(t);h+='<div class="card" style="padding:8px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:12px">'+esc(t.finished_at||"")+' · <b>'+esc(t.app_id)+'</b> → '+esc(t.platform||"")+(v?" v"+esc(v):"")+dn+'</span><span class="state '+st+'">'+(t.status==="done"?"完成":"失败")+'</span></div><div style="font-size:11px;color:var(--mut);margin-top:3px">'+(t.stage||"")+"</div></div>"});return h}
+function historyRowsHTML(hist){var h="";(hist||[]).forEach(function(t){var isOk=t.status==="done"&&!(t.errors||[]).length&&!(t.results||[]).some(function(v){return !v.ok});var st=isOk?"ok":"err";var dn=(t.dry_run?" (dry-run)":"");var v=historyRecordVersion(t);h+='<div class="card" style="padding:8px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:12px">'+esc(t.finished_at||"")+' · <b>'+esc(t.app_id)+'</b> → '+esc(t.platform||"")+(v?" v"+esc(v):"")+dn+'</span><span class="state '+st+'">'+(isOk?"完成":"失败")+'</span></div><div style="font-size:11px;color:var(--mut);margin-top:3px">'+esc(t.stage||"")+"</div></div>"});return h}
 function renderHistory(hist){var e=document.getElementById("sh");if(!e)return;if(!hist||!hist.length){e.innerHTML='<div class=muted>暂无发布记录</div>';return}e.innerHTML=historyRowsHTML(hist)}
 function showHistoryModal(){ST.HISTPAGE=1;renderHistoryModal()}
 function renderHistoryModal(){var hist=ST.HIST||[];var per=10;var total=Math.max(1,Math.ceil(hist.length/per));var pg=Math.min(Math.max(1,ST.HISTPAGE||1),total);ST.HISTPAGE=pg;var rows=hist.slice((pg-1)*per,pg*per);

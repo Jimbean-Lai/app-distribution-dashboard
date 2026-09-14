@@ -11,7 +11,7 @@ Registry (registry.py) -- 按平台名惰性加载适配器
      +-- StoreAdapter (base.py) -- 抽象基类
          |
          +-- GoogleAdapter (stores/google.py)  ready  (publish+query)
-         +-- AppleAdapter  (stores/apple.py)   ready  (query only)
+         +-- AppleAdapter  (stores/apple.py)   ready  (query；publish 已实现但实验性/待实测)
          +-- XiaomiAdapter (stores/xiaomi.py)  ready  (publish+query+定时)
          +-- OPPOAdapter   (stores/oppo.py)    ready  (publish+query+定时)
          +-- VivoAdapter   (stores/vivo.py)    ready  (publish+query+定时)
@@ -55,8 +55,14 @@ Registry (registry.py) -- 按平台名惰性加载适配器
 
 ## dry-run 行为
 
-- Google：上传到 edit 但**不 commit**
-- 其他平台：仅本地校验凭证、安装包、字段，**不发起真实 API 请求**
+各平台 dry-run 行为并不一致，使用时需注意：
+
+- **Google Play**：会调用真实 API **创建 edit**（验证凭证对该应用有权限），随后**立即删除该 edit**；
+  不上传安装包、不 commit，对线上无任何影响。
+- **腾讯应用宝（qq）**：会调用真实**只读**接口 `query_app_detail` 获取线上版本号，
+  用于校验待发布 versionCode 不小于线上版本；不取上传凭证、不上传 COS、不提审。
+- **其余平台**（小米/OPPO/vivo/荣耀/华为/Apple）：仅本地校验凭证、安装包、字段，
+  **不发起任何真实 API 请求**。
 
 ## 扩展新平台
 
