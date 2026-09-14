@@ -64,7 +64,11 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 # 依赖：requests、pycryptodome、cryptography（小米签名）、google-api-python-client（Google，可选）
+pip install -e .        # 安装 appstore 命令（本文档所有 appstore ... 命令都依赖这步）
 ```
+
+> 提示：以下命令均需先激活虚拟环境（`source .venv/bin/activate`）；不想安装也可以用
+> `python -m app_store.cli web ...` 代替 `appstore web ...`（其余命令同理，需在项目根目录执行）。
 
 ### 2. 配置凭证
 
