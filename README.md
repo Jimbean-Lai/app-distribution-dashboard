@@ -1,4 +1,4 @@
-# App 多平台发布看板（App Multi-Platform Release Dashboard）
+# App 分发看板（App Distribution Dashboard）
 
 [![GitHub stars](https://img.shields.io/github/stars/Jimbean-Lai/app-distribution-dashboard?style=social)](https://github.com/Jimbean-Lai/app-distribution-dashboard/stargazers)
 [![GitHub forks](https://img.shields.io/github/forks/Jimbean-Lai/app-distribution-dashboard?style=social)](https://github.com/Jimbean-Lai/app-distribution-dashboard/network)

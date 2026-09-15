@@ -4,9 +4,22 @@
 
 ## 启动
 
+`appstore` 命令装在项目 `.venv/bin/` 里，**不激活虚拟环境直接敲 `appstore` 会提示 command not found**。推荐用一键脚本（自动切到项目根目录，不依赖 PATH）：
+
 ```bash
-appstore web --port 8090 --credentials config/credentials.json --catalog apps/catalog.json
+./start-dashboard.sh          # 前台运行（Ctrl+C 停止）
+./start-dashboard.sh bg       # 后台运行（关终端不停，日志 tmpdoc/web-8090.log）
+./start-dashboard.sh stop     # 停止看板
+./start-dashboard.sh status   # 查看运行状态
 ```
+
+或者直接调虚拟环境里的命令（效果等同）：
+
+```bash
+.venv/bin/appstore web --port 8090 --credentials config/credentials.json --catalog apps/catalog.json
+```
+
+（也可先 `source .venv/bin/activate` 再敲 `appstore web ...`，用完 `deactivate` 退出虚拟环境）
 
 打开浏览器 → `http://127.0.0.1:8090`
 
