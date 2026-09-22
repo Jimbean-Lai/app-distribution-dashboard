@@ -12,7 +12,8 @@
   /query_app_detail         查询应用详情（含线上 VersionCode/VersionName）
   /get_file_upload_info     获取腾讯云 COS 预签名 URL + 上传流水号（每天限 100 次）
   PUT <pre_sign_url>        APK 原始字节直传 COS（Content-Type: application/octet-stream）
-  /update_app               应用更新提审（APK 流水号+MD5+版本特性说明+发布类型，每天限 50 次，超时建议 60s+）
+  /update_app               应用更新提审（APK 流水号+MD5+版本特性说明+发布类型，每天限 50 次，超时建议 60s+；
+                            按 APK ABI 自动选槽位：纯 arm64 走 apk64_*，双架构/32 位/无 lib 走 apk32_*（兼容包））
   /query_app_update_status  审核状态（1 审核中 / 2 驳回 / 3 通过 / 8 开发者撤销）
 
 签名：全部参数（公共 user_id/timestamp + 业务参数）按 ASCII 升序拼 k1=v1&k2=v2
@@ -26,6 +27,7 @@ import hashlib
 import hmac
 import os
 import time
+import zipfile
 from typing import Any, Dict, List
 
 from ..base import StoreAdapter, StoreError
@@ -96,6 +98,25 @@ class QQAdapter(StoreAdapter):
                 h.update(chunk)
         return h.hexdigest()
 
+    @staticmethod
+    def _apk_is_pure_64bit(path: str) -> bool:
+        """判断 APK 是否为纯 64 位安装包：lib/ 仅含 64 位 ABI（arm64-v8a / x86_64 等）。
+
+        含 32 位 ABI（armeabi-v7a 等）或无 lib 目录（纯 Java 应用，全架构兼容）都按
+        「32 位或 32&64 位兼容包」处理——双架构包若走 apk64_* 槽位，平台会按纯 64 位
+        解析校验并拒绝（ret=4000046）。"""
+        bit64 = {"arm64-v8a", "x86_64", "mips64", "mips64r2"}
+        found = set()
+        with zipfile.ZipFile(path) as z:
+            for name in z.namelist():
+                if name.startswith("lib/"):
+                    parts = name.split("/")
+                    if len(parts) >= 3 and parts[2]:
+                        found.add(parts[1])
+        if not found:
+            return False
+        return found.issubset(bit64)
+
     # ---------- 发布 ----------
     def publish(self, release: Release, dry_run: bool = False) -> SubmitResult:
         import requests as req
@@ -140,32 +161,58 @@ class QQAdapter(StoreAdapter):
         if scb:
             scb("上传 APK 到应用宝（腾讯云 COS）…")
         fs = os.path.getsize(apk)
-        if pc:
-            body = ProgressFile(apk, fs, pc)
+        # COS 直传自动重试：仅连接中断/超时重试（每次重新打开文件、从 0 重传，预签名 URL 不变）；
+        # 拿到任何 HTTP 响应（成功或报错）都不重试，与原有行为一致
+        uploaded = False
+        last_err = None
+        for attempt in range(1, 4):
             try:
-                # 显式 Content-Length：ProgressFile 无 __len__，requests 无法自动推断长度
-                resp = req.put(pre_sign_url, data=body,
-                               headers={"Content-Type": "application/octet-stream",
-                                        "Content-Length": str(fs)}, timeout=1800)
-            finally:
-                body.close()
-        else:
-            with open(apk, "rb") as f:
-                resp = req.put(pre_sign_url, data=f,
-                               headers={"Content-Type": "application/octet-stream",
-                                        "Content-Length": str(fs)}, timeout=1800)
-        if resp.status_code != 200:
-            raise StoreError(f"应用宝 COS 上传失败: HTTP {resp.status_code} {resp.text[:200]}")
+                if pc:
+                    body = ProgressFile(apk, fs, pc)
+                    try:
+                        # 显式 Content-Length：ProgressFile 无 __len__，requests 无法自动推断长度
+                        resp = req.put(pre_sign_url, data=body,
+                                       headers={"Content-Type": "application/octet-stream",
+                                                "Content-Length": str(fs)}, timeout=1800)
+                    finally:
+                        body.close()
+                else:
+                    with open(apk, "rb") as f:
+                        resp = req.put(pre_sign_url, data=f,
+                                       headers={"Content-Type": "application/octet-stream",
+                                                "Content-Length": str(fs)}, timeout=1800)
+                if resp.status_code != 200:
+                    raise StoreError(f"应用宝 COS 上传失败: HTTP {resp.status_code} {resp.text[:200]}")
+                uploaded = True
+                break
+            except StoreError:
+                raise  # HTTP 层错误不重试，保持原有行为
+            except (req.exceptions.ConnectionError, req.exceptions.Timeout) as e:
+                last_err = e
+                if attempt < 3:
+                    if scb:
+                        scb(f"上传中断（{type(e).__name__}），{2 ** attempt} 秒后第 {attempt + 1} 次重试…")
+                    time.sleep(2 ** attempt)
+        if not uploaded:
+            raise StoreError(
+                f"应用宝 COS 上传失败（{attempt} 次尝试均连接中断，多为网络不稳或带宽被占用）: {last_err}")
 
         if scb:
             scb("提交应用宝更新（提审）…")
         meta = release.metadata or {}
+        apk_md5 = self._file_md5(apk)
         params: Dict[str, Any] = {
             "pkg_name": pkg, "app_id": app_id,
-            "apk64_flag": 1,
-            "apk64_file_serial_number": serial,
-            "apk64_file_md5": self._file_md5(apk),
         }
+        # 提审槽位按 ABI 构成选择（双架构/32 位/无 lib → 兼容包 apk32_*；纯 64 位 → apk64_*）
+        if self._apk_is_pure_64bit(apk):
+            params["apk64_flag"] = 1
+            params["apk64_file_serial_number"] = serial
+            params["apk64_file_md5"] = apk_md5
+        else:
+            params["apk32_flag"] = 1
+            params["apk32_file_serial_number"] = serial
+            params["apk32_file_md5"] = apk_md5
         notes = release.whatsnew or release.release_notes or ""
         if notes:
             params["feature"] = notes  # 版本特性说明（更新说明）

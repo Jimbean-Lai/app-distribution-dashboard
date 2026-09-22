@@ -5,171 +5,191 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>App发布看板</title>
 <style>
-:root{color-scheme:light;--bg:#f5f5f7;--panel:#ffffff;--panel2:#f2f2f7;--line:rgba(0,0,0,.08);--hairline:#d2d2d7;--txt:#1d1d1f;--mut:#86868b;--acc:#0071e3;--btn-ink:#ffffff;--ok:#1d8a3e;--err:#d70015;--warn:#c93400;--hdr-bg:rgba(255,255,255,.72);--aside-bg:rgba(245,245,247,.85);--hov:rgba(0,0,0,.05);--hov2:rgba(0,0,0,.04);--btn2-bg:#ffffff;--btn2-hov:#f8f8fa;--chip-bg:#f2f2f7;--input-bg:#ffffff;--card-border:rgba(0,0,0,.06);--card-shadow:0 8px 24px rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.04);--console-bg:#f8f8fa;--console-txt:#3a3a3c;--tint-ok:#e8f6ec;--tint-err:#fdeceb;--tint-warn:#fdf0e7;--tint-blue:#e8f1fd;--tint-gray:#f0f4f8;--pending-txt:#0066cc;--draft-txt:#43688c;--ov-bg:rgba(0,0,0,.4);--modal-border:rgba(0,0,0,.06);--modal-shadow:0 20px 60px rgba(0,0,0,.2),0 4px 12px rgba(0,0,0,.08);--sb-thumb:rgba(0,0,0,.18);--sb-thumb-hov:rgba(0,0,0,.28);--sel:rgba(0,113,227,.18);--focus-ring:rgba(0,113,227,.15);--bdg-ok-bd:rgba(29,138,62,.35);--bdg-err-bd:rgba(215,0,21,.35)}
-:root[data-theme="dark"]{color-scheme:dark;--bg:#0f172a;--panel:#1e293b;--panel2:#294061;--line:#3b4a63;--hairline:#3b4a63;--txt:#e2e8f0;--mut:#94a3b8;--acc:#38bdf8;--btn-ink:#0a1628;--ok:#4ade80;--err:#f87171;--warn:#fbbf24;--hdr-bg:rgba(20,33,58,.85);--aside-bg:rgba(13,22,38,.85);--hov:#22406b;--hov2:#1d3357;--btn2-bg:#23395e;--btn2-hov:#2c4a75;--chip-bg:#23395e;--input-bg:#0d1626;--card-border:#3b4a63;--card-shadow:0 8px 24px rgba(0,0,0,.35);--console-bg:#0a1322;--console-txt:#e2e8f0;--tint-ok:#14532d;--tint-err:#7f1d1d;--tint-warn:#78350f;--tint-blue:#1e4d6b;--tint-gray:#1e3a5f;--pending-txt:#7dd3fc;--draft-txt:#38bdf8;--ov-bg:rgba(2,6,23,.6);--modal-border:#3b4a63;--modal-shadow:0 20px 60px rgba(0,0,0,.5);--sb-thumb:rgba(148,163,184,.3);--sb-thumb-hov:rgba(148,163,184,.45);--sel:rgba(56,189,248,.25);--focus-ring:rgba(56,189,248,.2);--bdg-ok-bd:#4ade80;--bdg-err-bd:#f87171}
+:root{color-scheme:light;--bg:#f5f5f7;--panel:#ffffff;--panel2:#f2f2f7;--line:rgba(0,0,0,.08);--hairline:#d2d2d7;--txt:#1d1d1f;--mut:#6e6e73;--acc:#0071e3;--btn-ink:#ffffff;--ok:#157034;--err:#d70015;--warn:#c93400;--hdr-bg:rgba(255,255,255,.72);--aside-bg:rgba(245,245,247,.85);--hov:rgba(0,0,0,.05);--hov2:rgba(0,0,0,.04);--btn2-bg:#ffffff;--btn2-hov:#f8f8fa;--chip-bg:#f2f2f7;--input-bg:#ffffff;--card-border:rgba(0,0,0,.06);--card-shadow:0 8px 24px rgba(0,0,0,.05),0 1px 2px rgba(0,0,0,.04);--console-bg:#f8f8fa;--console-txt:#3a3a3c;--tint-ok:#e8f6ec;--tint-err:#fdeceb;--tint-warn:#fdf0e7;--tint-blue:#e8f1fd;--tint-gray:#f0f4f8;--pending-txt:#0066cc;--draft-txt:#43688c;--ov-bg:rgba(0,0,0,.4);--modal-border:rgba(0,0,0,.06);--modal-shadow:0 20px 60px rgba(0,0,0,.2),0 4px 12px rgba(0,0,0,.08);--sb-thumb:rgba(0,0,0,.18);--sb-thumb-hov:rgba(0,0,0,.28);--sel:rgba(0,113,227,.18);--focus-ring:rgba(0,113,227,.35);--bdg-ok-bd:rgba(21,112,52,.45);--bdg-err-bd:rgba(215,0,21,.35)}
+:root[data-theme="dark"]{color-scheme:dark;--bg:#0f172a;--panel:#1e293b;--panel2:#294061;--line:#3b4a63;--hairline:#3b4a63;--txt:#e2e8f0;--mut:#94a3b8;--acc:#38bdf8;--btn-ink:#0a1628;--ok:#4ade80;--err:#fca5a5;--warn:#fbbf24;--hdr-bg:rgba(20,33,58,.85);--aside-bg:rgba(13,22,38,.85);--hov:#22406b;--hov2:#1d3357;--btn2-bg:#23395e;--btn2-hov:#2c4a75;--chip-bg:#23395e;--input-bg:#0d1626;--card-border:#3b4a63;--card-shadow:0 8px 24px rgba(0,0,0,.35);--console-bg:#0a1322;--console-txt:#e2e8f0;--tint-ok:#14532d;--tint-err:#7f1d1d;--tint-warn:#78350f;--tint-blue:#1e4d6b;--tint-gray:#1e3a5f;--pending-txt:#7dd3fc;--draft-txt:#38bdf8;--ov-bg:rgba(2,6,23,.6);--modal-border:#3b4a63;--modal-shadow:0 20px 60px rgba(0,0,0,.5);--sb-thumb:rgba(148,163,184,.3);--sb-thumb-hov:rgba(148,163,184,.45);--sel:rgba(56,189,248,.25);--focus-ring:rgba(56,189,248,.45);--bdg-ok-bd:#4ade80;--bdg-err-bd:#fca5a5}
+:root{--space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--font-label:11px;--font-caption:12px;--font-body:13px;--font-title:14px;--font-header:17px;--font-app-name:20px;--radius-sm:6px;--radius-md:10px;--radius-lg:14px;--radius-pill:999px;--touch-min:32px;--modal-min-w:380px}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%}
 body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","PingFang SC","Microsoft YaHei",sans-serif;display:flex;flex-direction:column;-webkit-font-smoothing:antialiased;transition:background .3s ease,color .3s ease}
 header,aside,.card,.modal,.result,.badge,.state{transition:background-color .3s ease,border-color .3s ease}
 ::selection{background:var(--sel)}
 ::-webkit-scrollbar{width:8px;height:8px}
-::-webkit-scrollbar-thumb{background:var(--sb-thumb);border-radius:4px}
+::-webkit-scrollbar-thumb{background:var(--sb-thumb);border-radius:var(--radius-sm)}
 ::-webkit-scrollbar-thumb:hover{background:var(--sb-thumb-hov)}
 ::-webkit-scrollbar-track{background:transparent}
-header{display:flex;align-items:center;justify-content:space-between;padding:12px 20px;background:var(--hdr-bg);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--line);height:52px;flex-shrink:0}
-header h1{font-size:17px;font-weight:700;letter-spacing:-.02em;white-space:nowrap}
-header .tag{color:var(--mut);font-size:12px;margin-left:10px}
-.hdr-right{display:flex;gap:8px;align-items:center}
-button{background:var(--acc);color:var(--btn-ink);border:none;border-radius:980px;padding:7px 16px;font-size:12.5px;font-weight:600;cursor:pointer;transition:transform .25s cubic-bezier(.25,1,.5,1),filter .2s ease}
+header{display:flex;align-items:center;justify-content:space-between;padding:10px var(--space-5);background:var(--hdr-bg);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-bottom:1px solid var(--line);min-height:52px;flex-shrink:0}
+header h1{font-size:var(--font-header);font-weight:700;letter-spacing:-.02em;white-space:nowrap}
+header .tag{color:var(--mut);font-size:var(--font-caption);margin-left:var(--space-2)}
+.hdr-right{display:flex;gap:var(--space-2);align-items:center}
+button{background:var(--acc);color:var(--btn-ink);border:none;border-radius:var(--radius-pill);padding:8px var(--space-4);font-size:var(--font-body);font-weight:600;min-height:var(--touch-min);cursor:pointer;transition:transform .25s cubic-bezier(.25,1,.5,1),filter .2s ease}
 button:hover{filter:brightness(1.06)}
 button:active{transform:scale(.97)}
 button:disabled{opacity:.4;cursor:not-allowed;transform:none}
 button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--focus-ring)}
 button.secondary{background:var(--btn2-bg);color:var(--txt);border:1px solid var(--hairline)}
 button.secondary:hover{background:var(--btn2-hov);filter:none}
-button.sm{padding:4px 11px;font-size:11.5px}
+button.sm{padding:5px var(--space-3);font-size:var(--font-caption);min-height:24px}
 .layout{display:flex;flex:1;overflow:hidden}
-aside{width:230px;flex-shrink:0;background:var(--aside-bg);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-right:1px solid var(--line);padding:14px 10px;overflow-y:auto}
-aside .cat-title{font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin:14px 4px 6px;font-weight:600}
-aside .app-item{display:flex;align-items:center;gap:8px;padding:9px 10px;border-radius:8px;cursor:pointer;font-size:13px;color:var(--txt);margin-bottom:2px;transition:background .2s ease}
+aside{width:230px;flex-shrink:0;background:var(--aside-bg);backdrop-filter:blur(20px) saturate(180%);-webkit-backdrop-filter:blur(20px) saturate(180%);border-right:1px solid var(--line);padding:var(--space-3) var(--space-2);overflow-y:auto}
+aside .cat-title{font-size:var(--font-label);color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin:var(--space-3) var(--space-1) var(--space-2);font-weight:600}
+aside .app-item{display:flex;align-items:center;gap:var(--space-2);padding:8px var(--space-2);border-radius:var(--radius-md);cursor:pointer;font-size:var(--font-body);color:var(--txt);margin-bottom:var(--space-1);transition:background .2s ease}
 aside .app-item:hover{background:var(--hov)}
 aside .app-item.active{background:var(--acc);color:var(--btn-ink);font-weight:600}
 aside .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-main{flex:1;overflow-y:auto;padding:18px 22px 40px;background:var(--bg)}
-.app-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
-.app-head h2{font-size:20px;letter-spacing:-.02em}
-.badge{background:var(--chip-bg);border:1px solid var(--line);border-radius:20px;padding:2px 10px;font-size:12px;color:var(--txt)}
+main{flex:1;overflow-y:auto;padding:var(--space-4) var(--space-5) 40px;background:var(--bg)}
+.app-head{display:flex;align-items:center;gap:var(--space-3);flex-wrap:wrap}
+.app-head h2{font-size:var(--font-app-name);letter-spacing:-.02em}
+.badge{background:var(--chip-bg);border:1px solid var(--line);border-radius:var(--radius-pill);padding:3px 10px;font-size:var(--font-caption);color:var(--txt)}
 .badge.ok{color:var(--ok);border-color:var(--bdg-ok-bd);background:var(--tint-ok)}
 .badge.err{color:var(--err);border-color:var(--bdg-err-bd);background:var(--tint-err)}
-.mini-btn{background:var(--acc);color:var(--btn-ink);border:none;border-radius:980px;padding:3px 12px;font-size:11px;cursor:pointer;font-weight:600;transition:transform .25s cubic-bezier(.25,1,.5,1),filter .2s ease}
+.mini-btn{background:var(--acc);color:var(--btn-ink);border:none;border-radius:var(--radius-pill);padding:5px var(--space-3);font-size:var(--font-caption);min-height:24px;cursor:pointer;font-weight:600;transition:transform .25s cubic-bezier(.25,1,.5,1),filter .2s ease}
 .mini-btn:hover{filter:brightness(1.08)}
 .mini-btn:active{transform:scale(.96)}
 .scroll{display:block}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px}
-.card{background:var(--panel);border:1px solid var(--card-border);border-radius:14px;padding:14px 16px;box-shadow:var(--card-shadow)}
-.card h3{font-size:13.5px;color:var(--acc);margin-bottom:10px;font-weight:600;letter-spacing:-.01em}
-.card .row{display:flex;justify-content:space-between;padding:4px 0;font-size:12.5px;border-bottom:1px dashed var(--line)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:var(--space-3)}
+.card{background:var(--panel);border:1px solid var(--card-border);border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4);box-shadow:var(--card-shadow)}
+.card h3{font-size:var(--font-title);color:var(--acc);margin-bottom:var(--space-2);font-weight:600;letter-spacing:-.01em}
+.card .row{display:flex;justify-content:space-between;padding:var(--space-1) 0;font-size:var(--font-body);border-bottom:1px solid var(--line)}
 .card .row:last-child{border:none}
 .k{color:var(--mut)}
 .v{color:var(--txt);max-width:65%;text-align:right;word-break:break-all}
-.input-row{display:flex;gap:6px;margin-bottom:8px;align-items:center}
-.input-row input{flex:1;background:var(--input-bg);color:var(--txt);border:1px solid var(--hairline);border-radius:8px;padding:7px 9px;font-size:12.5px;min-width:0}
-input,select,textarea{background:var(--input-bg);color:var(--txt);border:1px solid var(--hairline);border-radius:8px;padding:7px 9px;font-size:12.5px;width:100%}
+.input-row{display:flex;gap:var(--space-2);margin-bottom:var(--space-2);align-items:center}
+.input-row input{flex:1;background:var(--input-bg);color:var(--txt);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:7px 10px;font-size:var(--font-body);min-width:0}
+input,select,textarea{background:var(--input-bg);color:var(--txt);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:7px 10px;font-size:var(--font-body);width:100%}
 input:focus,select:focus,textarea:focus{outline:none;border-color:var(--acc);box-shadow:0 0 0 3px var(--focus-ring)}
-input[type=datetime-local]{background:var(--input-bg);color:var(--txt);border:1px solid var(--hairline);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:500;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;min-height:28px;-webkit-appearance:none;appearance:none}
+input[type=datetime-local]{background:var(--input-bg);color:var(--txt);border:1px solid var(--hairline);border-radius:var(--radius-md);padding:6px 10px;font-size:var(--font-body);font-weight:500;min-height:32px;-webkit-appearance:none;appearance:none}
 input[type=datetime-local]::-webkit-calendar-picker-indicator{cursor:pointer;padding:4px}
 textarea{min-height:48px;resize:vertical}
 form-row{display:flex;gap:10px}
 form-row>*{flex:1}
-label{display:block;color:var(--mut);font-size:11px;margin:8px 0 3px}
-.check{display:flex;align-items:center;gap:6px;margin:10px 0;font-size:12.5px;color:var(--txt)}
-.check input{width:auto}
-.actions{display:flex;gap:8px;margin:10px 0}
-.status-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:10px}
-.status-grid .card .state{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11.5px;font-weight:600}
-.state{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11.5px;font-weight:600}
+label{display:block;color:var(--mut);font-size:var(--font-label);margin:var(--space-2) 0 var(--space-1)}
+.check{display:flex;align-items:center;gap:var(--space-2);margin:var(--space-3) 0;font-size:var(--font-body);color:var(--txt)}
+.check input{width:16px;height:16px;accent-color:var(--acc);margin:0}
+.actions{display:flex;gap:var(--space-2);margin:var(--space-3) 0}
+.status-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:var(--space-3)}
+.state{display:inline-block;padding:3px var(--space-2);border-radius:var(--radius-sm);font-size:var(--font-caption);font-weight:600}
 .state.published{background:var(--tint-ok);color:var(--ok)}
 .state.reviewing{background:var(--tint-warn);color:var(--warn)}
 .state.pending{background:var(--tint-blue);color:var(--pending-txt)}
 .state.draft,.state.submitted{background:var(--tint-gray);color:var(--draft-txt)}
 .state.rejected{background:var(--tint-err);color:var(--err)}
 .state.unknown{background:var(--chip-bg);color:var(--mut)}
-.result{background:var(--console-bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:12px;line-height:1.6;max-height:220px;overflow-y:auto;color:var(--console-txt)}
+.state.killed{background:var(--tint-gray);color:var(--draft-txt)}
+.result{background:var(--console-bg);border:1px solid var(--line);border-radius:var(--radius-md);padding:var(--space-2) var(--space-3);font-family:"SF Mono",ui-monospace,Menlo,monospace;font-size:var(--font-caption);line-height:1.6;max-height:220px;overflow-y:auto;color:var(--console-txt)}
 .result div{white-space:pre-wrap;word-break:break-all}
 .result .ok{color:var(--ok)}
 .result .err{color:var(--err)}
 .hide{display:none}
-.muted{color:var(--mut);font-size:12px}
-#tsteps{font-size:12px;max-height:130px;overflow-y:auto;margin-top:8px;color:var(--txt)}
-#tsteps div{padding:2px 0;display:flex;align-items:center;gap:6px}
-#tsteps div .icn{font-size:14px;flex-shrink:0;display:inline-block;min-width:1.2em;text-align:center}
-#tsteps div .icn.ok{color:var(--ok)}
-#tsteps div .icn.err{color:var(--err)}
-#tsteps div .icn.cur{color:var(--acc);animation:pulseicn 1s infinite}
-@keyframes pulseicn{0%,100%{opacity:1}50%{opacity:.4}}
-#tinfo{font-size:14px;font-weight:600;margin-bottom:4px}
-#tstage{font-size:12.5px;color:var(--acc);margin:4px 0}
-#tmeta{display:flex;gap:8px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin-bottom:4px}
-#tmeta .tlabel{color:var(--mut);align-self:center;margin-right:2px}
-#tmeta .platform-chip{background:var(--chip-bg);border-radius:12px;padding:2px 10px;display:inline-flex;align-items:center;gap:4px;cursor:pointer;user-select:none;border:1px solid transparent;transition:box-shadow .15s,border-color .15s}
+.muted{color:var(--mut);font-size:var(--font-caption)}
+#tsteps{font-size:var(--font-caption);max-height:130px;overflow-y:auto;margin-top:var(--space-2);color:var(--txt)}
+#tsteps div{padding:2px 0;display:flex;align-items:center;gap:var(--space-2)}
+#tsteps div .icon{flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;min-width:20px}
+#tsteps div .icon.ok{color:var(--ok)}
+#tsteps div .icon.err{color:var(--err)}
+#tsteps div .icon.cur{color:var(--acc);animation:pulse-icon 1s infinite}
+@keyframes pulse-icon{0%,100%{opacity:1}50%{opacity:.4}}
+#tinfo{font-size:var(--font-title);font-weight:600;margin-bottom:var(--space-1)}
+#tstage{font-size:var(--font-body);color:var(--acc);margin:var(--space-1) 0}
+#tmeta{display:flex;gap:var(--space-2);flex-wrap:wrap;font-size:var(--font-caption);color:var(--mut);margin-bottom:var(--space-1)}
+#tmeta .tlabel{color:var(--mut);align-self:center;margin-right:var(--space-1)}
+#tmeta .platform-chip{background:var(--chip-bg);border-radius:var(--radius-pill);padding:3px 10px;display:inline-flex;align-items:center;gap:var(--space-1);cursor:pointer;user-select:none;border:1px solid transparent;transition:box-shadow .15s,border-color .15s}
 #tmeta .platform-chip:hover{border-color:var(--acc)}
 #tmeta .platform-chip.ok{background:var(--tint-ok);color:var(--ok)}
 #tmeta .platform-chip.err{background:var(--tint-err);color:var(--err)}
 #tmeta .platform-chip.run{background:var(--tint-blue);color:var(--pending-txt)}
 #tmeta .platform-chip.sel{box-shadow:0 0 0 2px var(--acc);border-color:var(--acc)}
 .overlay{position:fixed;inset:0;background:var(--ov-bg);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;z-index:60}
-.modal{background:var(--panel);border:1px solid var(--modal-border);border-radius:14px;padding:18px;min-width:380px;max-width:90vw;max-height:70vh;overflow-y:auto;box-shadow:var(--modal-shadow)}
-.file-item{padding:8px 6px;border-bottom:1px dashed var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:12px;font-size:12.5px}
+.modal{background:var(--panel);border:1px solid var(--modal-border);border-radius:var(--radius-lg);padding:var(--space-4);min-width:min(var(--modal-min-w),92vw);max-width:90vw;max-height:70vh;overflow-y:auto;box-shadow:var(--modal-shadow)}
+.file-item{padding:var(--space-2) var(--space-1);border-bottom:1px solid var(--line);cursor:pointer;display:flex;justify-content:space-between;gap:var(--space-3);font-size:var(--font-body)}
 .file-item:hover{background:var(--hov2)}
 .file-item .fname{flex:1}
-@media(max-width:760px){.layout{flex-direction:column}aside{width:100%;max-height:140px}.grid{grid-template-columns:1fr}}
-.plat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:6px 12px}
-.plat-item{display:flex;align-items:center;gap:6px;font-size:13px;padding:5px 8px;background:var(--panel2);border:1px solid var(--line);border-radius:8px;cursor:pointer}
-.plat-item input{width:auto;margin:0}
+@media(max-width:760px){.layout{flex-direction:column}aside{width:100%;max-height:200px;padding:var(--space-2) var(--space-3)}header{flex-wrap:wrap;row-gap:var(--space-2);padding:10px var(--space-3)}header .muted{display:none}.hdr-right{margin-left:auto}main{padding:var(--space-3) var(--space-3) 24px}.grid{grid-template-columns:1fr}.plat-grid{grid-template-columns:1fr}.modal{max-width:94vw}}
+.plat-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--space-2) var(--space-3)}
+.plat-item{display:flex;align-items:center;gap:var(--space-2);font-size:var(--font-body);padding:var(--space-1) var(--space-2);background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-md);cursor:pointer}
+.plat-item input{width:16px;height:16px;accent-color:var(--acc);margin:0}
+.row-between{display:flex;justify-content:space-between;align-items:center;gap:var(--space-2)}
+.row-between.start{align-items:flex-start}
+.section-head{display:flex;justify-content:space-between;align-items:center;gap:var(--space-2);margin-bottom:var(--space-2)}
+.section-title{font-size:var(--font-title);color:var(--acc);font-weight:600;letter-spacing:-.01em}
+.eyebrow{font-size:var(--font-label);color:var(--mut);text-transform:uppercase;letter-spacing:.5px;font-weight:600}
+.card.dense{padding:var(--space-2) var(--space-3);margin-bottom:var(--space-2)}
+.modal-body{overflow:auto;flex:1;min-height:0}
+.bundle-table{min-width:560px}
+.icon-svg{width:12px;height:12px;flex-shrink:0;vertical-align:-2px}
+#tsteps .icon-svg{width:14px;height:14px}
+a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+@media(pointer:coarse){button,button.sm,.mini-btn{min-height:44px}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation-duration:.01ms!important;animation-iteration-count:1!important}}
 </style>
 </head>
 <body>
 <header>
-  <div style=display:flex;align-items:center;gap:12px><h1>App发布看板</h1><span class=muted id=cfg></span></div>
-  <div class=hdr-right><button class="secondary sm" id="themeBtn" onclick="toggleTheme()">🌙 深色</button><button class=secondary sm onclick=ld()>刷新</button><button class=secondary sm onclick=validateAll()>校验凭证</button></div>
+  <div style="display:flex;align-items:center;gap:var(--space-3)"><h1>App发布看板</h1><span class="muted" id="cfg"></span></div>
+  <div class=hdr-right><button class="secondary sm" id="themeBtn" onclick="toggleTheme()">深色</button><button class=secondary sm onclick=ld()>刷新</button><button class=secondary sm onclick=validateAll()>校验凭证</button></div>
 </header>
 <div class=layout>
   <aside id=sb></aside>
   <main>
     <div id=appc><!-- 应用详情+发布表单 --></div>
     <div id=progress class=hide><div class=card>
-      <div style=display:flex;justify-content:space-between;align-items:start;gap:8px><div><b style=font-size:14px id=tinfo></b><div id=tmeta></div></div><button class="secondary sm" onclick=stopPoll() id=tclose style=display:none>×</button></div>
-      <div id=tstage></div>
-      <div id=tup style="font-size:12px;color:var(--acc);margin-top:5px;min-height:16px"></div>
+      <div class="row-between start"><div><b class="section-title" id="tinfo"></b><div id="tmeta"></div></div><div style="display:flex;gap:var(--space-2)"><button class="secondary sm" id="tstop" onclick="confirmStopTask()" style="display:none;color:var(--err)">停止发布</button><button class="secondary sm" onclick="stopPoll()" id="tclose" style="display:none">×</button></div></div>
+      <div id="tstage" aria-live="polite"></div>
+      <div id="tup" aria-live="polite" style="font-size:var(--font-caption);color:var(--acc);margin-top:var(--space-1);min-height:16px"></div>
       <div id=tsteps></div>
     </div></div>
     <div class=scroll>
-      <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><h3 style="color:var(--acc);font-size:14px;margin:0">平台状态</h3><button class="secondary sm hide" id="shareBtn" onclick="shareStatus()">📋 分享</button></div><div id=sg class=status-grid><div class=muted>点击「查询状态」查看</div></div></div>
-      <div><div style=display:flex;justify-content:space-between;align-items:center;margin-bottom:8px><h3 style=color:var(--acc);font-size:14px;margin:0>发布历史</h3><button class="secondary sm" onclick=showHistoryModal()>更多</button></div><div id=sh><div class=muted>暂无发布记录</div></div></div>
-      <div><h3 style=color:var(--acc);font-size:14px;margin-bottom:8px>日志</h3><div id=lg class=result><div>就绪</div></div></div>
+      <div id="sgSection" style="display:none"><div class="section-head"><h3 class="section-title">平台状态</h3><button class="secondary sm hide" id="shareBtn" onclick="shareStatus()"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>分享</button></div><div id="sg" class="status-grid"></div></div>
+      <div><div class="section-head"><h3 class="section-title">发布历史</h3><button class="secondary sm" onclick="showHistoryModal()">更多</button></div><div id="sh"><div class="muted">暂无发布记录</div></div></div>
+      <div><h3 class="section-title" style="margin-bottom:var(--space-2)">日志</h3><div id="lg" class="result" role="log"><div>就绪</div></div></div>
     </div>
   </main>
 </div>
-<div id=toast class=overlay style=display:none></div>
+<div id="toast" class="overlay" role="status" aria-live="polite" style="display:none"></div>
 <script>
 var ST={apps:[],cats:[],cur:null,plt:[],POLL:null};
 function $(v){return document.getElementById(v)}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
+function iconSvg(n){var P={check:'<polyline points="20 6 9 17 4 12"/>',cross:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',bolt:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',upload:'<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',warn:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',sun:'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',moon:'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'};return '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(P[n]||"")+"</svg>"}
 function api(p,o){return fetch(p,o).then(function(r){return r.json().catch(function(){return{}})})}
 function toast(m,t){var e=$("toast");e.style.display="flex";e.innerHTML='<div class="modal" style="width:auto;max-width:400px;text-align:center">'+esc(m)+'<div style="margin-top:12px"><button id=tb>确定</button></div></div>';e.style.background="transparent";clearTimeout(e._t);e._t=setTimeout(close,2600);var b=e.querySelector('#tb');if(b)b.addEventListener('click',close)}
 function close(){ $("toast").style.display="none" }
 function lg(t,c){var e=$("lg");if(e){var d=document.createElement("div");d.className=c||"";d.textContent=t;e.appendChild(d);e.scrollTop=e.scrollHeight}}
-function busy(o){document.querySelectorAll("button,input,select,textarea").forEach(function(b){b.disabled=o})}
-function setTheme(t){document.documentElement.dataset.theme=t;try{localStorage.setItem("dshTheme",t)}catch(e){}var b=$("themeBtn");if(b)b.textContent=t==="dark"?"☀️ 浅色":"🌙 深色"}
+function busy(o){document.querySelectorAll("button,input,select,textarea").forEach(function(b){if(b.id==="tstop")return;b.disabled=o})}
+function setTheme(t){document.documentElement.dataset.theme=t;try{localStorage.setItem("dshTheme",t)}catch(e){}var b=$("themeBtn");if(b)b.innerHTML=t==="dark"?iconSvg("sun")+"浅色":iconSvg("moon")+"深色"}
 function toggleTheme(){setTheme(document.documentElement.dataset.theme==="dark"?"light":"dark")}
 setTheme(function(){try{return localStorage.getItem("dshTheme")||"light"}catch(e){return "light"}}());
 function stat(ch){var m={published:"已上架",reviewing:"审核中",pending:"待发布",draft:"草稿",submitted:"已提交",rejected:"已拒绝",unknown:"未知"};return m[ch]||ch}
 function ld(){Promise.all([api("/api/apps"),api("/api/platforms"),api("/api/config"),api("/api/tasks")]).then(function(rs){ST.apps=rs[0].apps||[];ST.cats=rs[0].categories||[];ST.platforms=rs[1]||[];$("cfg").textContent="凭证: "+(rs[2].credentials||"");renderSb();if(ST.apps.length){if(!ST.cur||!ST.apps.find(function(a){return a.id===ST.cur.id}))sa(ST.apps[0].id);else renderMain()}var hist=(rs[3]&&rs[3].history)||[];ST.HIST=hist;renderHistory(hist.slice(0,5))}).catch(function(e){console.error(e)})}
-function renderSb(){var h="";(ST.cats||[]).forEach(function(c){h+='<div class=cat-title>'+esc(c.name)+"</div>";(ST.apps||[]).filter(function(a){return a.category===c.name}).forEach(function(a){var act=ST.cur&&ST.cur.id===a.id?"active":"";var dot=a.package_name?'<span class=dot style=background:var(--ok)></span>':'<span class=dot style=background:var(--warn)></span>';h+='<div class="app-item '+act+'" data-id="'+esc(a.id)+'" onclick="sa(this.dataset.id)">'+dot+'<span>'+esc(a.name)+"</span></div>"})});$("sb").innerHTML=h}
-function sa(id){ST.cur=(ST.apps||[]).find(function(a){return a.id===id})||null;ST.statuses=null;var _sb=$("shareBtn");if(_sb)_sb.classList.add("hide");var _sg=$("sg");if(_sg)_sg.innerHTML='<div class=muted>点击「查询状态」查看</div>';renderSb();renderMain()}
+function renderSb(){var h="";(ST.cats||[]).forEach(function(c){h+='<div class=cat-title>'+esc(c.name)+"</div>";(ST.apps||[]).filter(function(a){return a.category===c.name}).forEach(function(a){var act=ST.cur&&ST.cur.id===a.id?"active":"";var dot=a.package_name?'<span class=dot style=background:var(--ok)></span>':'<span class=dot style=background:var(--warn)></span>';h+='<div class="app-item '+act+'" role="button" tabindex="0" aria-current="'+(act?"true":"false")+'" data-id="'+esc(a.id)+'" onclick="sa(this.dataset.id)">'+dot+'<span>'+esc(a.name)+"</span></div>"})});$("sb").innerHTML=h}
+function sa(id){ST.cur=(ST.apps||[]).find(function(a){return a.id===id})||null;ST.statuses=null;ST.GB=null;ST.GBSEL=null;var _sb=$("shareBtn");if(_sb)_sb.classList.add("hide");var _sg=$("sg");if(_sg)_sg.innerHTML="";var _ss=$("sgSection");if(_ss)_ss.style.display="none";renderSb();renderMain()}
 function renderMain(){if(!ST.platforms&&!ST.apps.length){setTimeout(renderMain,250);return}var a=ST.cur;if(!a){$("appc").innerHTML='<div class=muted>请选择左侧应用</div>';return}
 var h='<div class=app-head><h2>'+esc(a.name)+'</h2>'+(a.category_display?'<span class=badge>'+esc(a.category_display)+'</span>':'')+(a.package_name?'<span class="badge" style=color:var(--ok)>'+esc(a.package_name)+'</span>':'<span class="badge err">未配包名</span>')+"</div>";
-h+='<div class=grid><div class=card><h3>应用信息</h3>'+
+h+='<div class=grid><div class=card><h3>构建产物</h3>'+
+'<div class=input-row><input id=paab value="" placeholder="AAB (Google Play)"><button class=sm secondary onclick=selBuild("aab")>选择…</button></div>'+
+'<div class=input-row><input id=papk value="" placeholder="APK (国内平台)"><button class=sm secondary onclick=selBuild("apk")>选择…</button></div>'+
+'<div id="papkAlert" style="font-size:var(--font-caption);margin:var(--space-1) 0;min-height:16px"></div>'+
+'<div style="margin-top:var(--space-3);border-top:1px solid var(--hairline);padding-top:var(--space-3)"><div class="eyebrow" style="margin-bottom:var(--space-2)">应用信息</div>'+
 '<div class=row><span class=k>包名</span><span class=v>'+esc(a.package_name||"未填")+'</span></div>'+
-'<div class=row><span class=k>versionName</span><span class=v>-</span></div>'+
-'<div class=row><span class=k>versionCode</span><span class=v>-</span></div>'+(a.huawei_harmony_package?'<div class=row><span class=k>华为 Harmony 包</span><span class=v>'+esc(a.huawei_harmony_package)+'</span></div>':"")+'</div>';
-h+='<div class=card><h3>构建产物</h3>'+
-'<div class=input-row><input id=paab value="" placeholder="AAB (Google Play)"><button class=sm secondary onclick=selBuild("aab")>选择…</button><button class=sm secondary onclick=clr("paab")>清</button></div>'+
-'<div class=input-row><input id=papk value="" placeholder="APK (国内平台)"><button class=sm secondary onclick=selBuild("apk")>选择…</button><button class=sm secondary onclick=clr("papk")>清</button></div>'+
-'<div id=papkAlert style=font-size:12px;margin:4px 0;min-height:16px></div><div style=margin-top:4px><button onclick=pth()>保存路径</button></div></div>';
+'<div class=row><span class=k>versionName</span><span class=v>'+"-"+'</span></div>'+
+'<div class=row><span class=k>versionCode</span><span class=v>'+"-"+'</span></div>'+(a.huawei_harmony_package?'<div class=row><span class=k>华为 Harmony 包</span><span class=v>'+esc(a.huawei_harmony_package)+'</span></div>':"")+'</div></div>';
 h+='<div class=card><h3>发布</h3>'+
-'<div><label>版本名</label><input id=ipvn readonly value=""></div>'+
-'<div><label>versionCode</label><input id=ipvc readonly value=""></div>'+
-'<div><label>发布平台（可多选，Apple 仅查询）</label><div id=ipp style=display:flex;flex-wrap:wrap;gap:8px>'+publishPlatsHTML()+'</div><div style=margin-top:6px><button type=button class=sm secondary onclick=platAll(1)>全选</button> <button type=button class=sm secondary onclick=platAll(0)>清空</button></div></div>'+
-'<div><label>轨道（Google）</label><select id=ipv><option>production</option><option>beta</option><option>alpha</option><option>internal</option></select></div>'+
-'<div><label>更新说明</label><textarea id=ipn rows=2></textarea><div class=form-group><label>定时上线（留空=立即）</label><input id=pot type=datetime-local></div></div>'+
-'<div class=check><input type=checkbox id=ipdry checked><label for=ipdry>仅校验（dry-run）</label> <input type=checkbox id=ipauto style=margin-left:14px><label for=ipauto>Google 自动送审（不勾=存草稿）</label></div>'+
-'<div class=actions>'+(a.query_only?'<button class=secondary disabled title="仅查询应用不支持发布">发布于 AGC 控制台</button>':'<button onclick=dpub()>发布</button>')+'<button class=secondary onclick=ds()>查询状态</button></div></div></div>';
+'<div><label for="ipvn">版本名</label><input id="ipvn" readonly value=""></div>'+
+'<div><label for="ipvc">versionCode</label><input id="ipvc" readonly value=""></div>'+
+'<div><label>发布平台（可多选）</label><div id="ipp" style="display:flex;flex-wrap:wrap;gap:var(--space-2)">'+publishPlatsHTML()+'</div><div style="margin-top:var(--space-2)"><button type=button class=sm secondary onclick=platAll(1)>全选</button> <button type=button class=sm secondary onclick=platAll(0)>清空</button></div></div>'+
+'<div><label for="ipv">轨道（Google）</label><select id="ipv"><option>production</option><option>beta</option><option>alpha</option><option>internal</option></select></div>'+
+'<div><label for="ipn">更新说明</label><textarea id="ipn" rows="2"></textarea><div class="form-group"><label for="pot">定时上线（留空=立即）</label><input id="pot" type="datetime-local"></div></div>'+
+'<div class=check><input type=checkbox id=ipdry checked><label for=ipdry>仅校验（不送审）</label> <input type="checkbox" id="ipauto" checked style="margin-left:var(--space-3)"><label for=ipauto>Google 自动送审</label></div>'+
+'<div class=actions>'+(a.query_only?'<button class=secondary disabled title="仅查询应用不支持发布">发布于 AGC 控制台</button>':'<button onclick=dpub()>发布</button>')+'</div></div>'+
+'<div class="card"><h3>平台状态</h3>'+
+'<div><label>查询平台（可多选）</label><div id="spp" style="display:flex;flex-wrap:wrap;gap:var(--space-2)">'+statusPlatsHTML()+'</div></div>'+
+'<div class="row-between" style="margin-top:var(--space-2)"><span><button type="button" class="sm secondary" onclick="statusPlatAll(1)">全选</button> <button type="button" class="sm secondary" onclick="statusPlatAll(0)">清空</button></span><button onclick="ds()">查询状态</button></div></div>'+
+'<div class=card><h3>下载</h3>'+
+'<div class="section-head"><span class="eyebrow">Google Play</span><button class="sm secondary" onclick="showBundleModal()">选择版本…</button></div>'+
+'<div id=gsel><span class=muted>未选择版本</span></div></div></div>';
 $("appc").innerHTML=h}
 function row(k,v){return'<div class=row><span class=k>'+esc(k)+'</span><span class=v>'+v+"</span></div>"}
-function clr(x){$(x).value="";pth()}
 function fp(t){var a=ST.cur;if(!a)return;api("/api/files").then(function(f){var l=(f&&f[t])||[];if(!l.length){toast("未检测到"+t.toUpperCase()+"文件","err");return}
-var h='<div class="overlay" onclick="if(event.target===this)cm()"><div class="modal"><h3 style=margin-bottom:8px>选择 '+t.toUpperCase()+" 文件</h3>";(l||[]).forEach(function(x){var z=x.size>1e6?(x.size/1e6).toFixed(1)+" MB":Math.max(1,Math.round(x.size/1e3))+" KB";h+='<div class="file-item" data-type="'+t+'" data-path="'+esc(x.path)+'" onclick="pick(this)"><span class=fname>'+esc(x.name)+'</span><span class=muted>'+z+"</span></div>"});h+='<div style=margin-top:10px;text-align:right><button class=secondary onclick=cm()>取消</button></div></div></div>';var d=document.createElement("div");d.innerHTML=h;document.body.appendChild(d.firstElementChild)})}
+var h='<div class="overlay" onclick="if(event.target===this)cm()"><div class="modal"><h3 class="section-title" style="margin-bottom:var(--space-2)">选择 '+t.toUpperCase()+" 文件</h3>";(l||[]).forEach(function(x){var z=x.size>1e6?(x.size/1e6).toFixed(1)+" MB":Math.max(1,Math.round(x.size/1e3))+" KB";h+='<div class="file-item" role="button" tabindex="0" data-type="'+t+'" data-path="'+esc(x.path)+'" onclick="pick(this)"><span class="fname">'+esc(x.name)+'</span><span class="muted">'+z+"</span></div>"});h+='<div style="margin-top:var(--space-2);text-align:right"><button class="secondary" onclick="cm()">取消</button></div></div></div>';var d=document.createElement("div");d.innerHTML=h;document.body.appendChild(d.firstElementChild)})}
 function pick(el){var t=el.dataset.type,p=el.dataset.path;var inp=$(t==="aab"?"paab":"papk");inp.value=p;cm();toast("已选: "+p.split("/").pop());if(ST.cur)autoMeta(p,ST.cur.id,t)}
 function selBuild(t){var inp=document.createElement("input");inp.type="file";inp.accept=t==="aab"?".aab":".apk";inp.onchange=function(){if(!inp.files||!inp.files[0])return;onFileChosen(t,inp.files[0])};inp.click()}
 function onFileChosen(t,file){if(!ST.cur){return}busy(true);lg("上传 "+(t==="aab"?"AAB":"APK")+": "+file.name+" …");
@@ -178,16 +198,19 @@ fetch("/api/build/upload",{method:"POST",body:fd}).then(function(r){return r.jso
 var inp=$(t==="aab"?"paab":"papk");inp.value=res.path;lg("已保存到: "+res.path,"ok");toast("已选择 "+(t==="aab"?"AAB":"APK")+": "+file.name);
 autoMeta(res.path,ST.cur.id,t)}).catch(function(e){busy(false);lg("上传异常: "+e,"err")})}
 function cm(){document.querySelectorAll(".overlay").forEach(function(e){if(e.id!=="toast")e.remove()})}
-function pth(){var a=ST.cur;if(!a)return;var ab=$("paab").value.trim(),ap=$("papk").value.trim();busy(true);api("/api/apps/update",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({app_id:a.id,aab_build:ab,apk_build:ap})}).then(function(r){if(r.ok){lg("路径已保存","ok");toast("路径已保存");if(ap&&!r.error)autoMeta(ap,a.id,"apk");if(ab&&!r.error)autoMeta(ab,a.id,"aab")}else{lg("保存失败: "+JSON.stringify(r),"err")}}).finally(function(){busy(false)})}
 function publishPlatsHTML(){var pubs=(ST.platforms||[]).filter(function(p){return p.platform!=="apple"});var labelMap={huawei:"华为",oppo:"OPPO",vivo:"VIVO",xiaomi:"小米",honor:"荣耀",google:"Google Play",qq:"应用宝"};return pubs.map(function(p){var nm=labelMap[p.platform]||p.display_name;var badge=p.availability==="ready"?"":"(骨架)";return '<label class=plat-item><input type=checkbox class=plat-cb value="'+p.platform+'" '+""+'><span>'+nm+'</span>'+badge+'</label>'}).join("")}
 function platAll(on){document.querySelectorAll(".plat-cb").forEach(function(c){c.checked=!!on})}
 function selPlats(){var arr=[];document.querySelectorAll(".plat-cb:checked").forEach(function(c){arr.push(c.value)});return arr.length?arr.join(","):"all"}
+// === 平台状态查询卡：勾选独立于发布平台，包含苹果（Apple 仅查询，不出现在发布勾选里） ===
+function statusPlatsHTML(){var order=["apple","huawei","oppo","vivo","xiaomi","honor","google","qq"];var labelMap={huawei:"华为",oppo:"OPPO",vivo:"VIVO",xiaomi:"小米",honor:"荣耀",google:"Google Play",qq:"应用宝",apple:"苹果"};var ps=(ST.platforms||[]).slice().sort(function(a,b){var ai=order.indexOf(a.platform),bi=order.indexOf(b.platform);return (ai===-1?99:ai)-(bi===-1?99:bi)});return ps.map(function(p){var nm=labelMap[p.platform]||p.display_name;var badge=p.availability==="ready"?"":"(骨架)";return '<label class=plat-item><input type=checkbox class=status-plat-cb value="'+p.platform+'" checked><span>'+nm+'</span>'+badge+'</label>'}).join("")}
+function statusPlatAll(on){document.querySelectorAll(".status-plat-cb").forEach(function(c){c.checked=!!on})}
+function statusSelPlats(){var arr=[];document.querySelectorAll(".status-plat-cb:checked").forEach(function(c){arr.push(c.value)});return arr.length?arr.join(","):"all"}
 function autoMeta(path,appId,type){type=type||(path.toLowerCase().endsWith(".aab")?"aab":"apk");
 api("/api/apk/meta",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:path})}).then(function(r){if(!r.ok){lg((type==="aab"?"AAB":"APK")+"解析失败: "+(r.error||"失败"),"err");return}
 var a=ST.cur;var al=$("papkAlert");var msg="";
 var exp=((a&&a.package_name)||"").trim();var real=(r.package_name||"").trim();
-if(exp&&real){if(real!==exp){msg='<span style="color:var(--err)">⚠️ 包名不一致：安装包='+esc(real)+' vs 配置='+esc(exp)+'</span>';lg("包名不一致! "+real+" ≠ "+exp,"err");if(al)al.innerHTML=msg}
-else{msg='<span style="color:var(--ok)">✓ 包名一致：'+esc(real)+'</span>';lg("包名一致: "+real,"ok");if(al)al.innerHTML=msg}}
+if(exp&&real){if(real!==exp){msg='<span style="color:var(--err)">'+iconSvg("warn")+' 包名不一致：安装包='+esc(real)+' vs 配置='+esc(exp)+'</span>';lg("包名不一致! "+real+" ≠ "+exp,"err");if(al)al.innerHTML=msg}
+else{msg='<span style="color:var(--ok)">'+iconSvg("check")+' 包名一致：'+esc(real)+'</span>';lg("包名一致: "+real,"ok");if(al)al.innerHTML=msg}}
 // 版本信息回填（APK 有；AAB 目前只解析出包名）
 if($("ipvn"))$("ipvn").value=r.version_name||($("ipvn").value||"");
 if($("ipvc"))$("ipvc").value=(r.version_code==null?($("ipvc").value||""):r.version_code);
@@ -207,8 +230,9 @@ var ab_in=$("paab").value.trim(),ap_in=$("papk").value.trim();
 var body={app_id:a.id,platform:selPlats(),dry_run:$("ipdry").checked,auto_review:$("ipauto").checked,version_name:$("ipvn").value.trim(),version_code:parseInt($("ipvc").value)||null,release_notes:$("ipn").value.trim(),track:$("ipv").value,aab_path:(ab_in||a.aab_build||""),apk_path:(ap_in||a.apk_build||""),online_time:document.getElementById("pot")?document.getElementById("pot").value.trim():""};
 lg("== "+(body.dry_run?"Dry-run":"正式")+"发布 "+(a.name||a.id)+" ==");busy(true);api("/api/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(function(r){if(r.task_id){lg("任务: "+r.task_id);startPoll(r.task_id)}else{lg("启动失败: "+JSON.stringify(r),"err");busy(false)}})}
 function renderTask(t){ST.LASTT=t;
+var stopBtn=$("tstop");if(stopBtn)stopBtn.style.display=(t.status==="running")?"":"none";
 var a=(ST.apps||[]).find(function(z){return z.id===t.app_id})||{};
-$("tinfo").textContent=esc(a.name||t.app_id)+" → "+esc(t.platform)+(t.dry_run?" ⚡dry-run":"");
+$("tinfo").innerHTML=esc(a.name||t.app_id)+" → "+esc(t.platform)+(t.dry_run?" "+iconSvg("bolt")+"dry-run":"");
 // === 平台芯片：点击切换查看对应平台详情（选中加阴影边框）；✓完成/✗失败/⚡进行中 ===
 var doneMap={},errMap={};(t.results||[]).forEach(function(v){doneMap[v.platform]=v});
 (t.errors||[]).forEach(function(v){errMap[v.platform]=v});
@@ -216,15 +240,15 @@ var pst=t.pstate||{},sel=ST.TSEL;
 var targets=(t.platform||"").split(",").map(function(s){return s.trim()}).filter(Boolean);
 $("tmeta").innerHTML=(targets.length?'<span class="tlabel">发布平台</span>':"")+targets.map(function(p){
   var cls="platform-chip",mark="";
-  if(doneMap[p]){cls+=doneMap[p].ok?" ok":" err";mark=doneMap[p].ok?" ✓":" ✗"}
-  else if(errMap[p]){cls+=" err";mark=" ✗"}
-  else if(pst[p]==="running"){cls+=" run";mark=" ⚡"}
+  if(doneMap[p]){cls+=doneMap[p].ok?" ok":" err";mark=" "+iconSvg("check")}
+  else if(errMap[p]){cls+=" err";mark=" "+iconSvg("cross")}
+  else if(pst[p]==="running"){cls+=" run";mark=" "+iconSvg("bolt")}
   if(sel===p)cls+=" sel";
-  return '<span class="'+cls+'" onclick="selTPlat(\''+esc(p)+'\')">'+esc(p)+mark+"</span>"}).join("");
+  return '<span class="'+cls+'" role="button" tabindex="0" data-plat="'+esc(p)+'" onclick="selTPlat(\''+esc(p)+'\')">'+esc(p)+mark+"</span>"}).join("");
 // === 当前阶段：选中平台显示其状态，否则显示整体 ===
-if(t.status==="done"){$("tstage").textContent="✅ 全部完成"}
-else if(t.status==="error"){$("tstage").textContent="❌ "+(t.stage||"有错误")}
-else if(sel){var st2=pst[sel];$("tstage").textContent=st2==="done"?"✅ "+sel+" 完成":st2==="error"?"❌ "+sel+" 失败":"⚡ "+sel+" 发布中"}
+if(t.status==="done"){$("tstage").innerHTML=iconSvg("check")+"全部完成"}
+else if(t.status==="error"){$("tstage").innerHTML=iconSvg("cross")+" "+esc(t.stage||"有错误")}
+else if(sel){var st2=pst[sel];$("tstage").innerHTML=st2==="done"?iconSvg("check")+esc(sel)+" 完成":st2==="error"?iconSvg("cross")+esc(sel)+" 失败":iconSvg("bolt")+esc(sel)+" 发布中"}
 else{$("tstage").textContent=t.stage||"处理中…"}
 // === 上传字节进度：选中平台显示其上传；未选中自动跟随正在活跃上传的平台（并行时取进度最低者，带平台名前缀）===
 var upEl=$("tup");if(upEl){var up=null,label="";
@@ -235,36 +259,55 @@ if(best){up=best;label=bp+" "}
 else if(t.upload){up=t.upload}}
 if(up&&up.sent!=null&&t.status!=="done"&&t.status!=="error"){
 var mb1=(up.sent/1048576).toFixed(1),mb2=(up.total/1048576).toFixed(1);
-if(up.total&&up.sent>=up.total){upEl.textContent="✓ "+label+"上传完成 "+mb2+"MB"}
-else{upEl.textContent="⬆ "+label+"上传中 "+mb1+"MB / "+mb2+"MB ("+up.pct+")"}}
+if(up.total&&up.sent>=up.total){upEl.innerHTML=iconSvg("check")+" "+esc(label)+"上传完成 "+mb2+"MB"}
+else{upEl.innerHTML=iconSvg("upload")+" "+esc(label)+"上传中 "+mb1+"MB / "+mb2+"MB ("+esc(up.pct)+")"}}
 else{upEl.textContent=""}}
 // === 步骤列表：选中平台显示其专属步骤，否则显示合并日志；✓已完成/⚡当前/✗失败 ===
+// 合并视图：并行发布时各平台步骤交错追加，不能只把全局最后一行当「进行中」——
+// 某平台的最新一步（如「上传 APK 到华为…」）只要该平台仍在运行（pstate=running）就是进行中，应标 ⚡；
+// 只有被同平台后续步骤顶过的行才算 ✓；平台失败（pstate=error）的最新一步标 ✗
 var sl=(sel&&t.psteps&&t.psteps[sel])?t.psteps[sel]:(t.steps||[]);
+var stepPlat=null,lastStepOf={};
+if(!sel){
+  stepPlat=function(s){
+    var m=s.replace(/^\[[^\]]*\]\s*/,"").replace(/^[\s→]+/,"");
+    for(var k=0;k<targets.length;k++){var pk=targets[k];if(m.lastIndexOf(pk+": ",0)===0)return pk}
+    return null};
+  sl.forEach(function(s,i){var p=stepPlat(s);if(p!==null)lastStepOf[p]=i});
+}
 var se=$("tsteps");var li=sl.length-1;
-se.innerHTML=sl.map(function(s,i){var icon,cls;
-  if(t.status==="running"){icon=i<li?"✓":"⚡";cls=i<li?"ok":"cur";}
-  else if(t.status==="done"){icon="✓";cls="ok";}
-  else{icon=i<li?"✓":"✗";cls=i<li?"ok":"err";}
-  return '<div><span class="icn '+cls+'">'+icon+'</span>'+esc(s)+"</div>"
+se.innerHTML=sl.map(function(s,i){var st;
+  if(t.status==="done"){st="ok"}
+  else{var p=stepPlat?stepPlat(s):null;
+    if(p!==null){
+      if(i===lastStepOf[p]){var ps=(t.pstate||{})[p];st=ps==="error"?"err":ps==="done"?"ok":"cur"}
+      else{st="ok"}}
+    else if(t.status==="running"){st=i<li?"ok":"cur"}
+    else{st=i<li?"ok":"err"}}
+  var icon=st==="ok"?iconSvg("check"):st==="err"?iconSvg("cross"):iconSvg("bolt");
+  return '<div><span class="icon '+st+'" aria-hidden="true">'+icon+'</span>'+esc(s)+"</div>"
 }).join("");se.scrollTop=se.scrollHeight}
 function startPoll(tid){ST.POLL=tid;ST.TSEL="";ST.LASTT=null;$("progress").classList.remove("hide");$("tsteps").innerHTML="";$("tup").textContent="";poll()}
 function selTPlat(p){ST.TSEL=(ST.TSEL===p?"":p);if(ST.LASTT)renderTask(ST.LASTT)}
 function poll(){if(!ST.POLL)return;api("/api/tasks/"+ST.POLL).then(function(t){if(t.error){lg("查询失败","err");stopPoll();return}
 renderTask(t)
 // === 任务结束：日志 + 手动关闭 × ===
-if(t.status==="done"||t.status==="error"){var isOk=t.status==="done"&&!(t.errors||[]).length&&!(t.results||[]).some(function(v){return !v.ok});
+if(t.status==="done"||t.status==="error"||t.status==="killed"){var stopped=t.status==="killed";var isOk=t.status==="done"&&!(t.errors||[]).length&&!(t.results||[]).some(function(v){return !v.ok});
 $("tclose").style.display="inline-block";$("tclose").onclick=function(){stopPoll()};
-lg("== "+(isOk?"✔ 发布成功":"✘ 发布有错误")+" ==",isOk?"ok":"err");
+lg("== "+(stopped?"✓ 发布已停止":(isOk?"✓ 发布成功":"✗ 发布有错误"))+" ==",stopped||isOk?"ok":"err");
 (t.results||[]).forEach(function(v){lg("["+v.platform+"] "+(v.ok?"✓ ":"✗ ")+v.message,v.ok?"ok":"err")});
 (t.errors||[]).forEach(function(v){lg("["+v.platform+"] 错误:"+v.error,"err")});
 // 任务结束：刷新发布历史显示（后端已落盘，此处重新拉取展示）
 api("/api/tasks").then(function(tr){ST.HIST=(tr&&tr.history)||[];renderHistory(ST.HIST.slice(0,5))});
 busy(false)}
 else{$("tclose").style.display="none";setTimeout(poll,600)}}).catch(function(){setTimeout(poll,1500)})}
-function stopPoll(){ST.POLL=null;$("tclose").style.display="none";$("progress").classList.add("hide")}
+function stopPoll(){ST.POLL=null;$("tclose").style.display="none";var sb=$("tstop");if(sb)sb.style.display="none";$("progress").classList.add("hide")}
+function confirmStopTask(){var h='<div class="overlay" onclick="if(event.target===this)clh()"><div class="modal" style="text-align:center;--modal-min-w:340px"><p style="margin:var(--space-2) 0 var(--space-3);font-size:var(--font-title);font-weight:600">停止发布</p><p style="color:var(--mut);font-size:var(--font-body);margin-bottom:var(--space-5)">确定停止当前发布任务？未完成的上传将被放弃，已完成的平台保持现状，不会有新的提交。</p><div style="display:flex;gap:var(--space-2);justify-content:center"><button onclick="stopTask()" style="background:var(--err)">停止</button><button class="secondary" onclick="clh()">取消</button></div></div></div>';var d=document.createElement("div");d.innerHTML=h;document.body.appendChild(d.firstElementChild)}
+function stopTask(){clh();var tid=ST.POLL;if(!tid){toast("当前没有进行中的任务","err");return}
+lg("== 停止发布任务 ==");api("/api/tasks/stop",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({task_id:tid})}).then(function(r){if(r&&r.ok){lg("已请求停止，正在中断各平台…","ok")}else{lg("停止失败: "+((r&&r.error)||"未知错误"),"err")}}).catch(function(){lg("停止请求发送失败","err")})}
 function ds(){var a=ST.cur;if(!a||!a.package_name){toast("请选择应用","err");return}
-lg("== 查询状态 "+a.name+" ==");busy(true);var _sb=$("shareBtn");if(_sb)_sb.classList.add("hide");$("sg").innerHTML="<div class=muted>查询中…</div>";api("/api/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({app_id:a.id,platform:selPlats()||"all"})}).then(function(r){renderStatusGrid(r.statuses||[]);busy(false)}).catch(function(){ $("sg").innerHTML='<div class=muted>查询失败</div>';busy(false)})}
-function confirmReleaseNow(){var h='<div class="overlay" onclick="if(event.target===this)clh()"><div class="modal" style="text-align:center;min-width:340px"><p style="margin:8px 0 14px;font-size:15px;font-weight:600">华为立即上线</p><p style="color:var(--mut);font-size:13px;margin-bottom:20px">将审核通过的定时上架版本改为<b>立即上架</b>（原定时时间作废）。确认执行？</p><div style="display:flex;gap:10px;justify-content:center"><button onclick=doReleaseNow() style="background:var(--acc)">确认执行</button><button class=secondary onclick=clh()>取消</button></div></div></div>';var d=document.createElement("div");d.innerHTML=h;document.body.appendChild(d.firstElementChild)}
+lg("== 查询状态 "+a.name+" ==");busy(true);var _sb=$("shareBtn");if(_sb)_sb.classList.add("hide");var _ss=$("sgSection");if(_ss)_ss.style.display="";$("sg").innerHTML="<div class=muted>查询中…</div>";api("/api/status",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({app_id:a.id,platform:statusSelPlats()})}).then(function(r){renderStatusGrid(r.statuses||[]);busy(false)}).catch(function(){ $("sg").innerHTML='<div class=muted>查询失败</div>';busy(false)})}
+function confirmReleaseNow(){var h='<div class="overlay" onclick="if(event.target===this)clh()"><div class="modal" style="text-align:center;--modal-min-w:340px"><p style="margin:var(--space-2) 0 var(--space-3);font-size:var(--font-title);font-weight:600">华为立即上线</p><p style="color:var(--mut);font-size:var(--font-body);margin-bottom:var(--space-5)">将审核通过的定时上架版本改为<b>立即上架</b>（原定时时间作废）。确认执行？</p><div style="display:flex;gap:var(--space-2);justify-content:center"><button onclick=doReleaseNow() style="background:var(--acc)">确认执行</button><button class=secondary onclick=clh()>取消</button></div></div></div>';var d=document.createElement("div");d.innerHTML=h;document.body.appendChild(d.firstElementChild)}
 function doReleaseNow(){clh();var a=ST.cur;if(!a||!a.package_name){toast("请选择应用","err");return}
 lg("== 华为立即上线 "+a.name+" ==");busy(true);
 api("/api/release-now",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({app_id:a.id,platform:"huawei"})}).then(function(r){busy(false);if(r&&r.ok){lg("华为立即上线请求成功"+(r.result&&r.result.message?"："+r.result.message:""),"ok");ds()}else{lg("立即上线失败: "+((r&&r.error)||"未知错误"),"err")}}).catch(function(){busy(false);lg("立即上线请求失败","err")})}
@@ -278,7 +321,7 @@ var live=liveArr.length?liveArr.join("<br>"):"-";
 var rev=(x.reviewing_version_names||[]).join(", ");var draft=(x.draft_version_names||[]).join(", ");var beta=(x.beta_version_names||[]).join(", ");var alpha=(x.alpha_version_names||[]).join(", ");var inter=(x.internal_version_names||[]).join(", ");var tst=[];if(beta)tst.push("Beta:"+beta);if(alpha)tst.push("Alpha:"+alpha);if(inter)tst.push("内测:"+inter);var tstRow=tst.join(" ；");
 var note=(x.audit_note||"").trim();
 var revText=note?esc(note):(rev?esc(rev):(x.state==="reviewing"?"审核中":"-"));
-h+='<div class=card><div style="display:flex;justify-content:space-between;margin-bottom:6px;align-items:center"><b style="font-size:12px">'+esc(nm[x.platform]||x.platform)+'</b><span style="display:flex;gap:6px;align-items:center">'+((x.platform==="huawei"&&x.state==="pending")?'<button class=mini-btn onclick="confirmReleaseNow()">立即上线</button>':"")+'<span class="state '+x.state+'">'+stat(x.state)+'</span></span></div>'+row("已上架版本",'<span class=v style="white-space:pre-line">'+live+'</span>')+row("审核状态",revText)+row("草稿未送审",draft?esc(draft):"-")+(tstRow?row("内测版本",esc(tstRow)):"")+'</div>'});
+h+='<div class="card"><div class="section-head"><b style="font-size:var(--font-caption)">'+esc(nm[x.platform]||x.platform)+'</b><span style="display:flex;gap:var(--space-2);align-items:center">'+((x.platform==="huawei"&&x.state==="pending")?'<button class=mini-btn onclick="confirmReleaseNow()">立即上线</button>':"")+'<span class="state '+x.state+'">'+stat(x.state)+'</span></span></div>'+row("已上架版本",'<span class=v style="white-space:pre-line">'+live+'</span>')+row("审核状态",revText)+row("草稿未送审",draft?esc(draft):"-")+(tstRow?row("内测版本",esc(tstRow)):"")+'</div>'});
 e.innerHTML=h}
 function shareStatus(){
 var list=ST.statuses||[],a=ST.cur;
@@ -289,7 +332,7 @@ ic.onerror=function(){drawShareCard(list,a,null)};
 ic.src="/api/app/icon?app_id="+encodeURIComponent(a.id)+"&v="+Date.now()}
 function drawShareCard(list,a,ic){
 var nm={huawei:"华为",oppo:"OPPO",vivo:"VIVO",xiaomi:"小米",honor:"荣耀",google:"Google Play",apple:"Apple",qq:"应用宝"};
-var bd={published:["已上架","#e8f6ec","#1d8a3e"],reviewing:["审核中","#fdf0e7","#c93400"],pending:["待发布","#e8f1fd","#0066cc"],draft:["草稿","#f0f4f8","#43688c"],submitted:["已提交","#f0f4f8","#43688c"],rejected:["已拒绝","#fdeceb","#d70015"],unknown:["未知","#f2f2f7","#86868b"]};
+var bd={published:["已上架","#e8f6ec","#157034"],reviewing:["审核中","#fdf0e7","#c93400"],pending:["待发布","#e8f1fd","#0066cc"],draft:["草稿","#f0f4f8","#43688c"],submitted:["已提交","#f0f4f8","#43688c"],rejected:["已拒绝","#fdeceb","#d70015"],unknown:["未知","#f2f2f7","#86868b"]};
 var FONT='-apple-system,"PingFang SC","Microsoft YaHei",sans-serif';
 var W=640,PX=34,HEAD=104,ROW=66,FOOT=44,SC=2;
 var rows=list.map(function(x){
@@ -338,7 +381,7 @@ c.fillStyle="#3a3a3c";c.fillText(fit(o.v,"400 12.5px "+FONT,W-PX-lx),lx,ly);ly+=
 var rh=rowHs[idx];
 if(idx<rows.length-1){c.strokeStyle="rgba(0,0,0,.08)";c.beginPath();c.moveTo(IX,y+rh-5);c.lineTo(W-PX,y+rh-5);c.stroke()}
 y+=rh});
-c.font="400 11px "+FONT;c.fillStyle="#aeaeb2";var ft="— 由 App 发布看板生成 —";c.fillText(ft,(W-c.measureText(ft).width)/2,H-18);
+c.font="400 11px "+FONT;c.fillStyle="#86868b";var ft="— 由 App 发布看板生成 —";c.fillText(ft,(W-c.measureText(ft).width)/2,H-18);
 function okToast(){toast("图片已复制到剪贴板，可直接粘贴分享")}
 function fb(){try{var u=cv.toDataURL("image/png");var l=document.createElement("a");l.href=u;l.download=(a.name||"app")+"-发布状态.png";l.click();toast("剪贴板不可用，已为您下载图片")}catch(e){toast("生成失败","err")}}
 try{cv.toBlob(function(blob){
@@ -346,18 +389,53 @@ if(blob&&navigator.clipboard&&navigator.clipboard.write&&window.ClipboardItem){
 navigator.clipboard.write([new ClipboardItem({"image/png":blob})]).then(okToast,fb)}else fb()},"image/png")}catch(e){fb()}
 lg("已生成分享图片（"+rows.length+" 个平台）","ok")}
 function historyRecordVersion(t){if(t.version_name)return t.version_name;var m=((t.steps||[]).join(" ").match(/ v(\d+(?:\.\d+)+)/));return m?m[1]:""}
-function historyRowsHTML(hist){var h="";(hist||[]).forEach(function(t){var isOk=t.status==="done"&&!(t.errors||[]).length&&!(t.results||[]).some(function(v){return !v.ok});var st=isOk?"ok":"err";var dn=(t.dry_run?" (dry-run)":"");var v=historyRecordVersion(t);h+='<div class="card" style="padding:8px 12px;margin-bottom:6px"><div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><span style="font-size:12px">'+esc(t.finished_at||"")+' · <b>'+esc(t.app_id)+'</b> → '+esc(t.platform||"")+(v?" v"+esc(v):"")+dn+'</span><span class="state '+st+'">'+(isOk?"完成":"失败")+'</span></div><div style="font-size:11px;color:var(--mut);margin-top:3px">'+esc(t.stage||"")+"</div></div>"});return h}
+var PLATFORM_NAMES={huawei:"华为",oppo:"OPPO",vivo:"VIVO",xiaomi:"小米",honor:"荣耀",google:"Google Play",apple:"Apple",qq:"应用宝"}
+function historyRowsHTML(hist){var h="";(hist||[]).forEach(function(t){var isOk=t.status==="done"&&!(t.errors||[]).length&&!(t.results||[]).some(function(v){return !v.ok});var st=t.status==="killed"?"killed":(isOk?"ok":"err");var dn=(t.dry_run?" (dry-run)":"");var v=historyRecordVersion(t);var failed=(t.errors||[]).map(function(e){return e.platform}).concat((t.results||[]).filter(function(v){return !v.ok}).map(function(v){return v.platform})).filter(function(p,i,a){return p&&a.indexOf(p)===i});var failLabel=t.status==="killed"?"未完成平台：":"失败平台：";var failLine=failed.length?'<div style="font-size:var(--font-label);color:var(--err);margin-top:var(--space-1)">'+failLabel+esc(failed.map(function(p){return PLATFORM_NAMES[p]||p}).join("、"))+'</div>':"";
+// 手动停止的任务：同时列出已完成平台（绿色）——停止前已完成的平台是真的完成了（真实发布会已提交到商店），
+// 只列未完成会让人误以为全部都没跑
+var okPlats=(t.results||[]).filter(function(v){return v.ok}).map(function(v){return v.platform}).filter(function(p,i,a){return p&&a.indexOf(p)===i});
+var doneLine=(t.status==="killed"&&okPlats.length)?'<div style="font-size:var(--font-label);color:var(--ok);margin-top:var(--space-1)">已完成平台：'+esc(okPlats.map(function(p){return PLATFORM_NAMES[p]||p}).join("、"))+'</div>':"";h+='<div class="card dense"><div class="row-between"><span style="font-size:var(--font-caption)">'+esc(t.finished_at||"")+' · <b>'+esc(t.app_id)+'</b> → '+esc(t.platform||"")+(v?" v"+esc(v):"")+dn+'</span><span class="state '+st+'">'+(t.status==="killed"?"已停止":(isOk?"完成":"失败"))+'</span></div><div style="font-size:var(--font-label);color:var(--mut);margin-top:var(--space-1)">'+esc(t.stage||"")+'</div>'+doneLine+failLine+"</div>"});return h}
 function renderHistory(hist){var e=document.getElementById("sh");if(!e)return;if(!hist||!hist.length){e.innerHTML='<div class=muted>暂无发布记录</div>';return}e.innerHTML=historyRowsHTML(hist)}
 function showHistoryModal(){ST.HISTPAGE=1;renderHistoryModal()}
 function renderHistoryModal(){var hist=ST.HIST||[];var per=10;var total=Math.max(1,Math.ceil(hist.length/per));var pg=Math.min(Math.max(1,ST.HISTPAGE||1),total);ST.HISTPAGE=pg;var rows=hist.slice((pg-1)*per,pg*per);
-var h='<div class="overlay" onclick="if(event.target===this)clh()"><div class="modal" style="min-width:560px;max-width:760px;max-height:80vh;display:flex;flex-direction:column">'
-+'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b style="font-size:15px">发布历史（全部）</b><button class="secondary sm" onclick=clh()>×</button></div>'
-+'<div style="overflow:auto;flex:1">'+(rows.length?historyRowsHTML(rows):'<div class=muted>暂无发布记录</div>')+'</div>'
-+'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;color:var(--mut)"><span>共 '+hist.length+' 条 · 第 '+pg+' / '+total+' 页</span><span><button class="secondary sm" '+(pg<=1?"disabled ":"")+'onclick=histPage(-1)>上一页</button> <button class="secondary sm" '+(pg>=total?"disabled ":"")+'onclick=histPage(1)>下一页</button></span></div></div></div>';
+var h='<div class="overlay" onclick="if(event.target===this)clh()"><div class="modal" style="--modal-min-w:560px;max-width:760px;max-height:80vh;display:flex;flex-direction:column">'
++'<div class="section-head"><b class="section-title">发布历史（全部）</b><button class="secondary sm" onclick="clh()">×</button></div>'
++'<div class="modal-body">'+(rows.length?historyRowsHTML(rows):'<div class="muted">暂无发布记录</div>')+'</div>'
++'<div class="row-between" style="margin-top:var(--space-2);font-size:var(--font-caption);color:var(--mut)"><span>共 '+hist.length+' 条 · 第 '+pg+' / '+total+' 页</span><span><button class="secondary sm" '+(pg<=1?"disabled ":"")+'onclick=histPage(-1)>上一页</button> <button class="secondary sm" '+(pg>=total?"disabled ":"")+'onclick=histPage(1)>下一页</button></span></div></div></div>';
 clh();var d=document.createElement("div");d.innerHTML=h;document.body.appendChild(d.firstElementChild)}
 function histPage(d){ST.HISTPAGE=Math.max(1,(ST.HISTPAGE||1)+d);renderHistoryModal()}
 function clh(){document.querySelectorAll(".overlay").forEach(function(e){if(e.id!=="toast")e.remove()})}
+// ==== Google Play 签名 APK 下载（覆盖安装测试用）====
+function showBundleModal(){var a=ST.cur;if(!a)return;if(!a.package_name){toast("该应用未配置包名","err");return}
+lg("== 拉取 Google Play Bundle 版本列表（"+a.name+"） ==");
+clh();var d=document.createElement("div");d.innerHTML='<div class="overlay" onclick="if(event.target===this)clh()"><div class="modal" style="--modal-min-w:600px"><div class="muted" style="padding:var(--space-2) 2px">正在从 Google Play 拉取版本列表…</div></div></div>';document.body.appendChild(d.firstElementChild);
+api("/api/google/bundles?app_id="+encodeURIComponent(a.id)).then(function(r){
+if(!r.ok){clh();var em=r.error||"拉取失败";lg("Google 版本列表拉取失败: "+em,"err");toast(em,"err");return}
+ST.GB=r.bundles||[];ST.GBPAGE=1;renderBundleModal();lg("已拉取 "+ST.GB.length+" 个 Bundle 版本","ok")}).catch(function(e){clh();lg("Google 版本列表拉取异常: "+e,"err");toast("拉取异常","err")})}
+function renderBundleModal(){var rows=ST.GB||[];var per=10;var total=Math.max(1,Math.ceil(rows.length/per));var pg=Math.min(Math.max(1,ST.GBPAGE||1),total);ST.GBPAGE=pg;var view=rows.slice((pg-1)*per,pg*per);
+var hd='<div style="display:flex;gap:var(--space-2);font-size:var(--font-label);color:var(--mut);padding:0 var(--space-1) var(--space-1);border-bottom:1px solid var(--hairline)"><span style="flex:0 0 84px">版本号</span><span style="flex:1">版本名称</span><span style="flex:0 0 76px">上传时间</span><span style="flex:0 0 64px">安装人数</span><span style="flex:0 0 170px">发布版本状态</span><span style="flex:0 0 52px"></span></div>';
+var rh=view.length?view.map(function(x,i){var gi=(pg-1)*per+i;return bundleRowHTML(x,gi)}).join(""):'<div class="muted" style="padding:var(--space-3) var(--space-1)">该应用暂无已上传的 Bundle</div>';
+var h='<div class="overlay" onclick="if(event.target===this)clh()"><div class="modal" style="--modal-min-w:640px;max-width:860px;max-height:80vh;display:flex;flex-direction:column">'
++'<div class="section-head"><b class="section-title">选择 Google Play Bundle 版本</b><button class="secondary sm" onclick="clh()">×</button></div>'
++'<div class="modal-body"><div class="bundle-table">'+hd+rh+'</div></div>'
++'<div class="row-between" style="margin-top:var(--space-2);font-size:var(--font-caption);color:var(--mut)"><span>共 '+rows.length+' 个版本 · 第 '+pg+' / '+total+' 页 · 上传时间/安装人数 Google API 不提供；未发布版本无名称，下载过一次后自动补全</span><span><button class="secondary sm" '+(pg<=1?"disabled ":"")+'onclick=gbPage(-1)>上一页</button> <button class="secondary sm" '+(pg>=total?"disabled ":"")+'onclick=gbPage(1)>下一页</button></span></div></div></div>';
+clh();var d=document.createElement("div");d.innerHTML=h;document.body.appendChild(d.firstElementChild)}
+function bundleRowHTML(x,gi){return '<div style="display:flex;gap:var(--space-2);align-items:center;padding:var(--space-2) var(--space-1);border-bottom:1px solid var(--hairline);font-size:var(--font-body)">'
++'<span style="flex:0 0 84px"><b>'+x.version_code+'</b></span>'
++'<span style="flex:1">'+esc(x.version_name||"—")+'</span>'
++'<span class=muted style="flex:0 0 76px">—</span>'
++'<span class=muted style="flex:0 0 64px">—</span>'
++'<span style="flex:0 0 170px;color:var(--mut)">'+esc(x.release_status||"未加入任何发布")+'</span>'
++'<span style="flex:0 0 52px;text-align:right"><button class="sm" onclick=pickBundle('+gi+')>选择</button></span></div>'}
+function gbPage(d){ST.GBPAGE=Math.max(1,(ST.GBPAGE||1)+d);renderBundleModal()}
+function pickBundle(i){var rows=ST.GB||[];if(i<0||i>=rows.length)return;ST.GBSEL=rows[i];clh();renderGSel();toast("已选版本 "+(ST.GBSEL.version_name||ST.GBSEL.version_code))}
+function renderGSel(){var e=$("gsel");if(!e)return;var s=ST.GBSEL;if(!s){e.innerHTML='<span class=muted>未选择版本</span>';return}
+e.innerHTML='<div class=row><span class=k>版本</span><span class=v>'+esc(s.version_name||"—")+'（versionCode '+s.version_code+'）</span></div>'
++'<div class=row><span class=k>发布状态</span><span class=v>'+esc(s.release_status||"—")+'</span></div>'
++'<div style="margin-top:var(--space-2)"><button onclick="dapk()">下载签名 APK</button><span class="muted" style="font-size:var(--font-caption);margin-left:var(--space-2)">下载由浏览器接管</span></div>'}
+function dapk(){var a=ST.cur,s=ST.GBSEL;if(!a||!s)return;lg("== 从 Google Play 下载签名 APK: "+(s.version_name||s.version_code)+"（versionCode "+s.version_code+"） ==");var u="/api/google/apk?app_id="+encodeURIComponent(a.id)+"&version_code="+encodeURIComponent(s.version_code);var l=document.createElement('a');l.href=u;l.target="_blank";document.body.appendChild(l);l.click();l.remove();toast("已开始下载（由浏览器接管，进度看浏览器下载列表）");lg("已交给浏览器下载：该版本首次下载需先从 Google 拉取（1-2 分钟）后自动开始","ok")}
 function validateAll(){lg("== 校验凭证 ==");api("/api/validate").then(function(r){(r.validated||[]).forEach(function(x){lg("["+x.platform+"] "+(x.ok?"OK":"ERROR")+(x.message?" "+x.message:""),x.ok?"ok":"err")})})}
+document.addEventListener("keydown",function(e){if(e.key!=="Enter"&&e.key!==" ")return;var t=e.target;if(!t||!t.classList)return;if(t.classList.contains("app-item")){e.preventDefault();sa(t.dataset.id)}else if(t.classList.contains("file-item")){e.preventDefault();pick(t)}else if(t.classList.contains("platform-chip")){e.preventDefault();selTPlat(t.dataset.plat)}});
 ld();
 </script>
 </body>

@@ -11,6 +11,10 @@ class StoreError(RuntimeError):
     """商店接入层的可预期错误（凭证缺失、接口返回错误、未接入等）。"""
 
 
+class TaskKilledError(Exception):
+    '''用户请求停止发布任务时，由进度/步骤回调抛出以中断对应平台线程（web.py 的停止发布用）。'''
+
+
 class StoreAdapter(ABC):
     """每个应用商店实现一个子类。
 

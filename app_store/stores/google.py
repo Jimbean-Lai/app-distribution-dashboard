@@ -17,11 +17,12 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from ..base import StoreAdapter, StoreError
+from ..base import StoreAdapter, StoreError, TaskKilledError
 from ..models import AuditState, Platform, Release, SubmitResult, StoreStatus, utcnow_iso
 
 _ANDROIDPUBLISHER_SCOPE = "https://www.googleapis.com/auth/androidpublisher"
-_UPLOAD_TIMEOUT = 1800  # 秒，单次 socket 读/写超时（大 AAB 上传，按需在凭证里覆盖）
+_UPLOAD_TIMEOUT = 300  # 秒，单次 socket 读/写超时（按次生效：健康上传每次 send 都很快完成不会触发；
+                     # 只在网络完全卡死时触发断开重试；过长会让卡死的上传挂半小时，按需在凭证里覆盖）
 _UPLOAD_MAX_RETRIES = 5  # 上传失败自动重试次数
 
 
@@ -224,6 +225,9 @@ class GoogleAdapter(StoreAdapter):
                         uploaded = json.loads(content)
                         break
                     except StoreError:
+                        raise
+                    except TaskKilledError:
+                        # 停止发布：不能被下面的重试逻辑吞掉，必须立刻向上传播中断线程
                         raise
                     except Exception as e:
                         last_err = e
@@ -462,3 +466,164 @@ class GoogleAdapter(StoreAdapter):
             raw=raw_tracks,
             **extra,
         )
+
+    # ---- 签名 APK 下载（generatedapks）----
+
+    def list_bundle_versions(self, package_name: str) -> List[Dict[str, Any]]:
+        """列出该应用已上传的全部 App Bundle 版本（供看板选择下载签名 APK）。
+
+        临时 edit 内 bundles.list + tracks.list 合并出每个 versionCode 的轨道/发布状态，
+        完成后立即删除 edit（不留痕）。Google API 不提供上传时间与安装人数，
+        前端对应列显示占位符；版本名称解析自轨道 release name
+        （本看板发布时写入 "versionCode (versionName)"，Google 自动生成时通常也含版本信息）。
+        """
+        service = self._service(package_name)
+        try:
+            edit = service.edits().insert(body={}, packageName=package_name).execute()
+        except Exception as e:
+            raise StoreError(f"Google Play 拉取版本失败（可能是包名/服务账号权限问题）: {e}")
+        edit_id = edit["id"]
+        try:
+            try:
+                bundles = (
+                    service.edits()
+                    .bundles()
+                    .list(packageName=package_name, editId=edit_id)
+                    .execute()
+                )
+                tracks = (
+                    service.edits()
+                    .tracks()
+                    .list(packageName=package_name, editId=edit_id)
+                    .execute()
+                )
+            except Exception as e:
+                raise StoreError(f"Google Play 拉取版本列表失败: {e}")
+        finally:
+            try:
+                service.edits().delete(packageName=package_name, editId=edit_id).execute()
+            except Exception:
+                pass
+
+        # versionCode → 所在轨道的发布信息（同一版本可能出现在多个轨道）
+        rel_map: Dict[int, List[Dict[str, Any]]] = {}
+        for track in tracks.get("tracks", []):
+            track_name = track.get("track", "?")
+            for rel in track.get("releases", []):
+                for c in rel.get("versionCodes", []):
+                    try:
+                        vc = int(c)
+                    except (TypeError, ValueError):
+                        continue
+                    rel_map.setdefault(vc, []).append(
+                        {
+                            "track": track_name,
+                            "name": rel.get("name") or "",
+                            "status": rel.get("status") or "",
+                        }
+                    )
+        status_map = {
+            "completed": "已发布",
+            "inProgress": "发布中",
+            "draft": "草稿",
+            "halted": "已暂停",
+        }
+        out: List[Dict[str, Any]] = []
+        for b in bundles.get("bundles", []):
+            try:
+                vc = int(b.get("versionCode"))
+            except (TypeError, ValueError):
+                continue
+            rels = rel_map.get(vc) or []
+            if rels:
+                status_txt = "；".join(
+                    "{}·{}".format(r["track"], status_map.get(r["status"], r["status"] or "未知"))
+                    for r in rels
+                )
+                rel_name = next((r["name"] for r in rels if r.get("name")), "")
+            else:
+                status_txt = "未加入任何发布"
+                rel_name = ""
+            # 版本名称：优先从 "versionCode (versionName)" 形态解析
+            version_name = ""
+            if rel_name:
+                m = re.match(r"^\d+\s+\((.+)\)$", rel_name)
+                version_name = m.group(1) if m else rel_name
+            out.append(
+                {
+                    "version_code": vc,
+                    "version_name": version_name,
+                    "release_status": status_txt,
+                }
+            )
+        out.sort(key=lambda x: -x["version_code"])
+        return out
+
+    def download_signed_apk(self, package_name: str, version_code: int, dest_path: str) -> str:
+        """下载指定 Bundle 版本的签名 APK（universal 整包）到 dest_path。
+
+        generatedapks.list 拿 generatedUniversalApk 的 downloadId，
+        再 generatedapks.download_media 流式写盘（8MB 分块）。
+        下载的 APK 由 Play App Signing 的应用签名密钥签名，可直接覆盖安装做升级测试。
+        409 = 该 bundle 的 APK 还在生成中（刚上传），稍后重试即可。
+        """
+        import googleapiclient.http
+        from googleapiclient.errors import HttpError
+
+        service = self._service(package_name)
+        try:
+            resp = (
+                service.generatedapks()
+                .list(packageName=package_name, versionCode=version_code)
+                .execute()
+            )
+        except HttpError as e:
+            if getattr(e.resp, "status", None) == 409:
+                raise StoreError("该版本的 APK 还在生成中（Google 需要少量时间），请稍后重试")
+            if getattr(e.resp, "status", None) == 404:
+                raise StoreError("Google 未找到该版本（确认 versionCode 为已上传的 App Bundle）")
+            raise StoreError(f"Google 拉取签名 APK 信息失败: {e}")
+        except Exception as e:
+            raise StoreError(f"Google 拉取签名 APK 信息失败: {e}")
+
+        download_id = ""
+        for key in resp.get("generatedApks", []) or []:
+            uni = key.get("generatedUniversalApk") or {}
+            if uni.get("downloadId"):
+                download_id = uni["downloadId"]
+                break
+        if not download_id:
+            raise StoreError("该版本未生成 universal 整包 APK，无法下载（可重试或换版本）")
+
+        dest = Path(dest_path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            req = service.generatedapks().download_media(
+                packageName=package_name, versionCode=version_code, downloadId=download_id
+            )
+            with open(dest, "wb") as fh:
+                downloader = googleapiclient.http.MediaIoBaseDownload(
+                    fh, req, chunksize=8 * 1024 * 1024
+                )
+                done = False
+                while not done:
+                    _st, done = downloader.next_chunk()
+        except HttpError as e:
+            if dest.exists():
+                try:
+                    dest.unlink()
+                except OSError:
+                    pass
+            if getattr(e.resp, "status", None) == 409:
+                raise StoreError("该版本的 APK 还在生成中（Google 需要少量时间），请稍后重试")
+            raise StoreError(f"下载签名 APK 失败: {e}")
+        except Exception as e:
+            if dest.exists():
+                try:
+                    dest.unlink()
+                except OSError:
+                    pass
+            raise StoreError(f"下载签名 APK 失败: {e}")
+        if not dest.is_file() or dest.stat().st_size < 1024:
+            raise StoreError("下载结果异常（文件不存在或过小），请重试")
+        return str(dest)

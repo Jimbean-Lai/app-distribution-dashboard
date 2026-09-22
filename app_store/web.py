@@ -25,7 +25,7 @@ from typing import Any, Dict, List
 from urllib.parse import parse_qs, urlparse
 
 from .apk_meta import extract_apk_icon, parse_build, parse_apk
-from .base import StoreError
+from .base import StoreError, TaskKilledError
 from .catalog import get_catalog
 from .config import load_credentials
 from .models import Platform
@@ -291,7 +291,7 @@ def _new_task(app_id, platform, dry_run, apk_path="", aab_path="", version_name=
             "steps": [], "results": [], "errors": [],
             "upload": None,
             # 并行发布：按平台分组的步骤/状态/上传进度（前端点击芯片切换查看）
-            "psteps": {}, "pstate": {}, "uploads": {},
+            "psteps": {}, "pstate": {}, "uploads": {}, "kill_req": False,
         }
         _PENDING_PATHS[tid] = {"apk": apk_path, "aab": aab_path}
     return tid
@@ -351,8 +351,17 @@ def _pupload(tid: str, plat: str, sent: int, total: int):
                 "sent": sent, "total": total, "pct": f"{100*sent/(total or 1):.0f}%"}
 
 
-def _record_error(tid: str, plat: str, targets, msg: str):
-    """平台线程失败：记录错误 + 推进整体进度（锁外再写状态，Lock 不可重入）。"""
+def _check_kill(tid: str):
+    '''停止发布：任务被标记 kill_req 后，由各平台线程的回调调用并抛异常，中断上传/流程。'''
+    with _task_lock:
+        t = _TASKS.get(tid)
+        if t is not None and t.get("kill_req"):
+            raise TaskKilledError()
+
+
+def _record_error(tid: str, plat: str, targets, msg: str, label: str = "错误"):
+    """平台线程失败：记录错误 + 推进整体进度（锁外再写状态，Lock 不可重入）。
+    label 用于区分普通错误与手动停止（传空串则只显示 msg 本身）。"""
     with _task_lock:
         t = _TASKS.get(tid)
         if t is not None:
@@ -360,8 +369,9 @@ def _record_error(tid: str, plat: str, targets, msg: str):
             done_n = len(t.get("results") or []) + len(t.get("errors") or [])
             t["progress"] = min(95, 15 + int(75 * done_n / max(1, len(targets))))
     _pstate(tid, plat, "error")
-    _step(tid, f"  {plat}: 错误 {msg}", "error")
-    _pstep(tid, plat, f"错误 {msg}", "error")
+    text = f"{label} {msg}" if label else msg
+    _step(tid, f"  {plat}: {text}", "error")
+    _pstep(tid, plat, text, "error")
 
 
 def _publish_worker(tid: str):
@@ -432,9 +442,18 @@ def _publish_worker(tid: str):
                     raise StoreError("；".join(problems))
                 _step(tid, f"  {key}: 凭证校验通过")
                 _pstep(tid, key, "凭证校验通过")
-                # 上传进度/步骤回调：写入按平台分组的字段（前端按选中平台展示）
-                rel.metadata["_progress_cb"] = lambda sent, total: _pupload(tid, key, sent, total)
-                rel.metadata["_step_cb"] = lambda msg: (_pstep(tid, key, msg), _step(tid, f"  {key}: {msg}"))
+                # 上传进度/步骤回调：写入按平台分组的字段（前端按选中平台展示）；
+                # 回调前先检查停止请求（kill_req），被停止时抛 TaskKilledError 中断当前平台线程
+                def _progress_cb(sent, total):
+                    _check_kill(tid)
+                    _pupload(tid, key, sent, total)
+
+                def _step_cb(msg):
+                    _check_kill(tid)
+                    _pstep(tid, key, msg)
+                    _step(tid, f"  {key}: {msg}")
+                rel.metadata["_progress_cb"] = _progress_cb
+                rel.metadata["_step_cb"] = _step_cb
                 res = adapter.publish(rel, dry_run=dry_run)
                 ok = bool(res.ok)
                 item = {"platform": key, "ok": ok, "message": res.message,
@@ -448,10 +467,16 @@ def _publish_worker(tid: str):
                 _pstate(tid, key, "done" if ok else "error")
                 _step(tid, f"  {key}: {'完成' if ok else '失败'} - {res.message}", "ok" if ok else "error")
                 _pstep(tid, key, f"{'完成' if ok else '失败'} - {res.message}", "ok" if ok else "error")
+            except TaskKilledError:
+                _record_error(tid, key, targets, "已手动停止", label="")
             except StoreError as e:
                 _record_error(tid, key, targets, str(e))
             except Exception as e:  # 线程内兜底，单平台异常不影响其他平台线程
-                _record_error(tid, key, targets, f"异常: {e}")
+                # 适配器可能把回调抛出的 TaskKilledError 包装成普通异常，这里按停止请求归一处理
+                if _TASKS.get(tid, {}).get("kill_req"):
+                    _record_error(tid, key, targets, "已手动停止", label="")
+                else:
+                    _record_error(tid, key, targets, f"异常: {e}")
 
         if targets:
             with ThreadPoolExecutor(max_workers=len(targets)) as pool:
@@ -462,11 +487,14 @@ def _publish_worker(tid: str):
             t = _TASKS.get(tid) or {}
             results = list(t.get("results") or [])
             errors = list(t.get("errors") or [])
+            kill_req = bool(t.get("kill_req"))
         # 汇总：errors 非空或任一平台返回 ok=False 都视为失败（含部分失败），
-        # 不能无条件标 done，否则前端会误显示「发布成功」
+        # 不能无条件标 done，否则前端会误显示「发布成功」；被手动停止的任务统一标 killed
         failed_n = len(errors) + sum(1 for r in results if not r.get("ok"))
         ok_n = sum(1 for r in results if r.get("ok"))
-        if failed_n == 0:
+        if kill_req:
+            final_status, final_stage = "killed", "已手动停止"
+        elif failed_n == 0:
             final_status, final_stage = "done", "全部完成"
         elif ok_n > 0:
             final_status, final_stage = "error", "部分失败"
@@ -474,7 +502,9 @@ def _publish_worker(tid: str):
             final_status, final_stage = "error", "发布失败"
         _update(tid, status=final_status, progress=100, stage=final_stage,
                 results=results, errors=errors)
-        if failed_n:
+        if kill_req:
+            _step(tid, "发布已手动停止", "error")
+        elif failed_n:
             _step(tid, f"共 {failed_n} 个平台失败", "error")
         else:
             _step(tid, "发布流程全部完成")
@@ -508,6 +538,10 @@ class Handler(BaseHTTPRequestHandler):
                 return _json_response(self, payload)
             if path == "/api/app/icon":
                 return self._api_app_icon()
+            if path == "/api/google/bundles":
+                return self._api_google_bundles()
+            if path == "/api/google/apk":
+                return self._api_google_apk()
             if path == "/api/platforms":
                 return _json_response(self, list_platforms())
             if path == "/api/config":
@@ -552,6 +586,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._api_apk_meta(body)
             if path == "/api/release-now":
                 return self._api_release_now(body)
+            if path == "/api/tasks/stop":
+                return self._api_tasks_stop(body)
             if path == "/api/tasks/clear":
                 return self._api_tasks_clear()
             return _json_response(self, {"error": "not found"}, 404)
@@ -755,6 +791,146 @@ class Handler(BaseHTTPRequestHandler):
         except OSError:
             pass  # 缓存写失败不影响本次响应
         return _bytes_response(self, data, ctype)
+
+    def _api_google_bundles(self):
+        """Google Play 已上传的 App Bundle 版本列表（供下载面板选择版本）。
+
+        返回 [{version_code, version_name, release_status}]，按版本号倒序。
+        Google API 不提供上传时间/安装人数，由前端展示占位符。
+        """
+        qs = parse_qs(urlparse(self.path).query)
+        app_id = (qs.get("app_id") or [""])[0].strip()
+        if not app_id:
+            raise StoreError("缺少 app_id")
+        app = self._catalog().get_app(app_id)
+        package = str(app.get("package_name") or "").strip()
+        if not package:
+            raise StoreError("该应用未配置包名（package_name）")
+        creds = load_credentials(self.credentials_path)
+        if not creds.get("google"):
+            raise StoreError("未配置 Google 凭证（credentials.json google 段）")
+        adapter = get_adapter("google", creds)
+        rows = adapter.list_bundle_versions(package)
+        # Google API 不提供未发布/历史版本的 versionName（Play Console 网页是内部数据源），
+        # 合并本地缓存：下载过的版本会从 APK 清单解析出真实版本名
+        cached = self._google_cached_version_names()
+        pkg_names = cached.get(package) or {}
+        for row in rows:
+            if not row.get("version_name"):
+                vname = pkg_names.get(str(row.get("version_code")))
+                if vname:
+                    row["version_name"] = vname
+        return _json_response(self, {"ok": True, "package_name": package, "bundles": rows})
+
+    def _downloads_dir(self) -> str:
+        return os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(self.catalog_path))), "downloads"
+        )
+
+    def _google_version_names_path(self) -> str:
+        return os.path.join(self._downloads_dir(), "version-names.json")
+
+    def _google_cached_version_names(self) -> Dict[str, Dict[str, str]]:
+        """读本地版本名称缓存 {package: {version_code: version_name}}。"""
+        path = self._google_version_names_path()
+        if not os.path.isfile(path):
+            return {}
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def _remember_google_version_name(self, package: str, version_code: int, apk_path: str) -> None:
+        """从已下载的签名 APK 解析 versionName 落盘缓存（供版本列表补全名称列）。"""
+        names = self._google_cached_version_names()
+        pkg_map = names.get(package) or {}
+        if str(version_code) in pkg_map:
+            return  # 已解析过
+        try:
+            meta = parse_apk(apk_path)
+        except Exception:
+            return  # 解析失败不影响下载本身
+        vname = str(meta.get("version_name") or "").strip()
+        if not vname:
+            return
+        pkg_map[str(version_code)] = vname
+        names[package] = pkg_map
+        path = self._google_version_names_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        tmp = path + ".tmp"
+        try:
+            with open(tmp, "w", encoding="utf-8") as f:
+                json.dump(names, f, ensure_ascii=False, indent=1)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, path)
+        except Exception:
+            try:
+                os.remove(tmp)
+            except OSError:
+                pass
+
+    def _api_google_apk(self):
+        """下载指定 Bundle 版本的签名 APK（universal 整包，Play App Signing 密钥签名）。
+
+        服务端先从 Google 拉全量写入 downloads/{包名}-{versionCode}.apk（已缓存则直接用），
+        再带 Content-Length 流式回给浏览器——前端可显示下载进度。
+        """
+        qs = parse_qs(urlparse(self.path).query)
+        app_id = (qs.get("app_id") or [""])[0].strip()
+        try:
+            version_code = int((qs.get("version_code") or [""])[0])
+        except ValueError:
+            raise StoreError("version_code 必须是整数")
+        if not app_id:
+            raise StoreError("缺少 app_id")
+        app = self._catalog().get_app(app_id)
+        package = str(app.get("package_name") or "").strip()
+        if not package:
+            raise StoreError("该应用未配置包名（package_name）")
+        # 文件名只允许包名字符（Android 包名规则），防路径注入
+        safe_pkg = re.sub(r"[^A-Za-z0-9._-]", "_", package)
+        fname = f"{safe_pkg}-{version_code}.apk"
+        dest = os.path.join(self._downloads_dir(), fname)
+        if not os.path.isfile(dest):
+            creds = load_credentials(self.credentials_path)
+            if not creds.get("google"):
+                raise StoreError("未配置 Google 凭证（credentials.json google 段）")
+            adapter = get_adapter("google", creds)
+            adapter.download_signed_apk(package, version_code, dest)
+        # 顺带把该版本的真实 versionName 解析进本地缓存（版本列表显示用）
+        self._remember_google_version_name(package, version_code, dest)
+        size = os.path.getsize(dest)
+        self.send_response(200)
+        self.send_header("Content-Type", "application/vnd.android.package-archive")
+        self.send_header("Content-Length", str(size))
+        self.send_header("Content-Disposition", f'attachment; filename="{fname}"')
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        with open(dest, "rb") as f:
+            while True:
+                chunk = f.read(1024 * 1024)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+
+    def _api_tasks_stop(self, body: Dict[str, Any]):
+        '''停止运行中的发布任务：置 kill_req 标记，各平台线程在下一次进度/步骤回调处中断。'''
+        tid = str(body.get("task_id") or "").strip()
+        if not tid:
+            raise StoreError("缺少 task_id")
+        with _task_lock:
+            t = _TASKS.get(tid)
+            if t is None:
+                return _json_response(self, {"ok": False, "error": "任务不存在"}, 404)
+            if t.get("status") != "running":
+                return _json_response(self, {"ok": False, "error": "任务已结束，无需停止"}, 400)
+            t["kill_req"] = True
+            t["stage"] = "正在停止…"
+        _step(tid, "收到停止请求，正在中断各平台上传…")
+        return _json_response(self, {"ok": True})
 
     def _api_tasks_clear(self):
         """清空发布历史：删除落盘文件 + 清理内存中的稳定任务。"""
