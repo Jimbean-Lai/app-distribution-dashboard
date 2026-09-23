@@ -7,8 +7,10 @@
 `appstore` 命令装在项目 `.venv/bin/` 里，**不激活虚拟环境直接敲 `appstore` 会提示 command not found**。推荐用一键脚本（自动切到项目根目录，不依赖 PATH）：
 
 ```bash
-./start-dashboard.sh          # 前台运行（Ctrl+C 停止）
+./start-dashboard.sh          # 前台运行（Ctrl+C 停止，仅本机访问）
 ./start-dashboard.sh bg       # 后台运行（关终端不停，日志 tmpdoc/web-8090.log）
+./start-dashboard.sh lan      # 局域网模式前台运行（绑 0.0.0.0，须先配置登录账号）
+./start-dashboard.sh lanbg    # 局域网模式后台运行
 ./start-dashboard.sh stop     # 停止看板
 ./start-dashboard.sh status   # 查看运行状态
 ```
@@ -16,21 +18,152 @@
 或者直接调虚拟环境里的命令（效果等同）：
 
 ```bash
-.venv/bin/appstore web --port 8090 --credentials config/credentials.json --catalog apps/catalog.json
+.venv/bin/appstore web --port 8090 --credentials config/credentials.json --catalog apps/catalog.json --board-config config/board.json
 ```
 
 （也可先 `source .venv/bin/activate` 再敲 `appstore web ...`，用完 `deactivate` 退出虚拟环境）
 
 打开浏览器 → `http://127.0.0.1:8090`
 
-## 安全提示（重要）
+## 登录与权限（config/board.json）
 
-看板**没有任何登录鉴权**：任何能访问该端口的用户都可以直接执行**发布、上传 APK/AAB、查询状态**等操作，
-等于掌握了各平台的发布权限。因此：
+看板默认**无登录、仅本机 127.0.0.1 访问**（和以前一样，零配置可用）。配置 `config/board.json`（模板
+`config/example.board.json`，已 gitignore 不入库）后开启**账号登录 + 两种角色**：
 
-- **仅绑定 `127.0.0.1`（默认值）**，只允许本机访问，这是推荐用法。
-- **不要将 `--host` 设为 `0.0.0.0` 后直接暴露到局域网/公网**——网内任何人都可发布新版本、消耗平台配额并触发审核。
-- 如确需远程访问，请放在反向代理（Nginx / Caddy 等）之后，并配置访问鉴权（如 Basic Auth、IP 白名单）后再暴露。
+```json
+{
+  "users": [
+    {"username": "laijunbin", "password": "改成你的密码", "role": "admin"},
+    {"username": "xiaowang",  "password": "同事的密码",   "role": "viewer"}
+  ],
+  "session_days": 14
+}
+```
+
+| 角色 | 能做什么 |
+| --- | --- |
+| **admin** | 全部操作：发布、上传安装包、停止任务、清空历史、华为立即上线、查询 |
+| **viewer** | 只读：看板/版本/发布历史/分享图、查询状态、下载签名 APK；**发布类按钮全部禁用**（后端同样拦截） |
+
+- 会话 Cookie 有效期默认 14 天（`session_days` 可调，1~90），访问自动续期；重启看板后需重新登录。
+- 不想在文件里放明文密码的，可以存 `"password_sha256": "<sha256(明文)>"`（有它时优先校验哈希）。
+- 登录失败有 0.6s 延迟，增加暴力尝试成本；会话为 HttpOnly + SameSite=Lax Cookie，写接口额外做 Origin 同源校验。
+- `users` 留空/文件不存在 = 鉴权关闭（本机直连模式，行为与旧版一致）。
+
+### 登录/操作审计日志
+
+账号的登录与敏感操作会追加记录到 `config/login_log.jsonl`（JSONL 一行一条，已 gitignore）：
+
+- **记录内容**：登录成功/失败（错密码也记，能看出暴力尝试）、退出登录、发布应用（含应用/平台/版本/dry-run 标记）、上传安装包、修改应用配置、停止发布任务、清空发布历史、华为立即上线；viewer 越权尝试写操作被拒也会记
+- **查看**：`cat config/login_log.jsonl`（或 `grep 失败 config/login_log.jsonl`、`grep 发布 config/login_log.jsonl`）
+- 普通浏览/查询不记录，避免日志噪音；测试隔离可用环境变量 `APPSTORE_AUDIT_LOG` 指向临时文件
+
+## 局域网访问（同事共用看板）
+
+1. 先按上一节配置好登录账号（**没有账号时局域网模式会拒绝启动**，这是故意的安全闸）。
+2. 启动：`./start-dashboard.sh lan`（前台）或 `./start-dashboard.sh lanbg`（后台）。
+3. 启动日志会打印本机局域网地址，例如：
+
+   ```
+   🖥  AppStore 发布看板已启动（局域网模式，监听 0.0.0.0:8090）
+      同网段访问: http://192.168.x.x:8090/
+      看板配置: config/board.json（登录鉴权: 已开启）
+      账号: laijunbin(admin), xiaowang(viewer)
+   ```
+
+4. 同事用浏览器打开该地址 → 输入 viewer 账号 → 只能看和查询，不能发布。
+
+注意事项：
+
+- **首次局域网启动 macOS 会弹防火墙授权**（允许 python 接受传入连接），点「允许」。
+- 局域网 IP 是 DHCP 分配的，路由器重启/换网可能变化；要固定可在路由器里给这台 Mac 绑定静态 IP。
+- **不要把端口直接映射到公网**（路由器端口转发/DMZ）。看板走 HTTP 明文 + 会话 Cookie，公网暴露有被嗅探/劫持风险；
+  确需外网访问请走 VPN（如 Tailscale/WireGuard）或带 HTTPS+鉴权的反向代理。
+
+## 飞书群机器人（发布通知 + @查询）
+
+### 一、为什么是「自建应用机器人」而不是群 webhook 机器人
+
+群里「添加机器人 → 自定义机器人」拿到的那种 webhook 机器人**只能往群里发文字/卡片**：
+收不到 @消息（没法做「@机器人查状态」），也不能传图片（发图要先调开放平台接口拿 image_key，需要应用身份）。
+所以这里用的是**企业自建应用 + 机器人能力**，配合**长连接**接收事件——不需要公网 IP、不需要端口映射，内网 Mac 直接可用。
+
+### 二、创建步骤（一次性，约 10 分钟）
+
+1. 打开 [飞书开放平台](https://open.feishu.cn/) → 开发者后台 → **创建企业自建应用**；
+   应用名称填你想要的机器人名（如「App 发布助手」）、上传头像——**这就是群里显示的机器人名字/头像**。
+2. 左侧「添加应用能力」→ 添加 **机器人**。
+3. 左侧「权限管理」→ 开通以下权限（搜索后逐个开通）：
+   - `im:message`（获取与发送单聊、群组消息）
+   - `im:message.group_at_msg`（获取群组中所有 @机器人 的消息）
+   - `im:resource`（上传图片或文件）
+   （在「事件与回调」里订阅事件时，控制台也会提示所需权限，可一键开通。）
+4. 左侧「事件与回调」→ 订阅方式选 **使用长连接接收事件** → 添加事件 **接收消息 im.message.receive_v1**。
+5. 「凭证与基础信息」页复制 **App ID / App Secret**。
+6. 「版本管理与发布」→ 创建版本 → 申请线上发布；可用范围按需（全员或指定同事）；管理员在飞书管理后台审核通过。
+   > 机器人名字/头像以后想改：回「凭证与基础信息」改应用名称/头像，已发布的应用改完需要**发布一个新版本**才对全部人生效。
+7. 把 App ID / App Secret 填进 `config/board.json`：
+
+   ```json
+   "feishu": {
+     "app_id": "cli_xxxx",
+     "app_secret": "xxxx",
+     "notify_chat_id": "",
+     "notify_on_publish": true
+   }
+   ```
+
+8. 重启看板（`./start-dashboard.sh stop` 再 `bg` / `lanbg`），日志出现「飞书机器人: 长连接启动中」即接入成功；
+   看板顶栏也会显示「飞书已连接」。
+9. 群设置 → 群机器人 → 添加机器人 → 选刚创建的应用机器人进群。
+10. 在群里 **@机器人 发送「绑定通知群」** → 它回复确认，发布完成通知就会自动发到这个群
+    （也可以手动把群的 `chat_id` 填进 `notify_chat_id`，两种方式等价）。
+
+### 三、机器人用法（群成员）
+
+| 指令 | 作用 |
+| --- | --- |
+| `@机器人 查询 <应用名>` | 查该应用各平台状态，回复**状态分享图**（同看板「分享」那张） |
+| `@机器人 查询 全部` | 逐个应用查询（较慢，每个应用查完即回图） |
+| `@机器人 绑定通知群` | 把当前群设为发布完成通知群（写回 board.json，立即生效） |
+| `@机器人 解绑通知群` | 取消通知群绑定 |
+| `@机器人`（或「帮助」） | 回复用法说明 + 可查询应用列表 |
+
+应用名支持模糊匹配（中文名、英文名、应用 ID、包名都行，还能容错错别字如 `KKHOEM`→`KKhome`）；命中多个会列出来让你说得更具体。
+
+**其他行为约定**：
+
+- **回复会 @ 回提问的人**：群里谁 @机器人，机器人的每条回复（含查询结果）都会 @上他；结果消息用富文本把「@提问者 + 状态分享图」放在同一条里（飞书的图片消息本身带不了 @）。私聊则不带 @。
+- **@所有人不触发**：消息里 @所有人（飞书标记 `@_all`）时机器人直接忽略，不会响应，避免群里发通知时误触发查询。
+- **口语化指令**：`凯迪仕版本多少`、`帮我查一下 homeaccess`、`目前显示KKHOEM 版本` 这类都能识别。
+
+### 四、发布完成通知长什么样
+
+**默认只有「正式发布 + 勾选的平台全部提审成功」才会通知**（dry-run 校验、部分失败、被手动停止、只存草稿
+等场景一律静默）。判定口径：国内平台提交成功即提审；Google 须勾选「自动送审」且提交成功才算送审，
+仅存草稿不算。
+
+以后想扩展通知范围，改 `config/board.json` 的 `feishu.notify_on` 字段即可（改完重启）：
+
+```json
+"notify_on": {
+  "all_success": true,      // 勾选平台全部提审成功（默认唯一开启）
+  "partial_success": false, // 部分平台成功（其余失败/仅草稿）
+  "failed": false,          // 全部失败
+  "killed": false,          // 被手动停止
+  "draft_only": false       // 只存草稿未送审（如 Google 未勾自动送审）
+}
+```
+
+满足条件时，机器人往通知群发一张卡片：
+
+- 标题：✅ 发布完成 · 应用名 + 版本
+- 字段：应用、平台、操作者（登录账号）、结束时间
+- **状态分享图**：发布后自动查一次各平台状态，渲染与看板同款的分享图嵌在卡片里
+- 「打开看板」按钮：直接跳回看板页面
+
+机器人私聊也支持同样的指令（不用 @）。
+
 
 ## 界面布局
 
@@ -156,3 +289,37 @@ Content-Type: application/json
 
 {"app_id": "example-app"}
 ```
+
+### 登录 / 会话
+
+```http
+POST /api/login
+Content-Type: application/json
+
+{"username": "laijunbin", "password": "..."}
+```
+
+返回 `{"ok": true, "username": "...", "role": "admin"}` 并设置会话 Cookie（`board_session`，HttpOnly）。
+开启鉴权后其余 API 未登录一律 401；viewer 调发布类接口返回 403。
+
+```http
+GET  /api/session    # 当前登录态 {authenticated, auth_enabled, username, role}
+POST /api/logout     # 退出登录
+```
+
+### 状态分享图（服务端渲染）
+
+```http
+GET /api/share-image?app_id=example-app
+```
+
+返回 PNG（与看板「分享」按钮出的图同款设计）。会实时查询各平台状态（约 10-60 秒），
+飞书机器人的通知图就是它出的；CI/脚本也可以直接取图。
+
+### 看板配置信息
+
+```http
+GET /api/config
+```
+
+返回凭证/目录路径、登录开关、当前用户角色、飞书机器人连接状态。

@@ -13,6 +13,8 @@ dependencies = [
     "cryptography>=41.0",      # Apple App Store Connect API JWT 签名（ES256）
     "pycryptodome",            # 小米 X509 公钥 RSA 加密签名
     "androguard",              # APK/AAB 元信息解析（apk_meta.py）
+    "Pillow>=10.0",            # 分享图服务端渲染（share_image.py）
+    "lark-oapi>=1.3",          # 飞书机器人官方 SDK（feishu_bot.py）
 ]
 
 [project.optional-dependencies]

@@ -45,7 +45,7 @@ main{flex:1;overflow-y:auto;padding:var(--space-4) var(--space-5) 40px;backgroun
 .mini-btn{background:var(--acc);color:var(--btn-ink);border:none;border-radius:var(--radius-pill);padding:5px var(--space-3);font-size:var(--font-caption);min-height:24px;cursor:pointer;font-weight:600;transition:transform .25s cubic-bezier(.25,1,.5,1),filter .2s ease}
 .mini-btn:hover{filter:brightness(1.08)}
 .mini-btn:active{transform:scale(.96)}
-.scroll{display:block}
+.scroll{display:block;margin-top:var(--space-4)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:var(--space-3)}
 .card{background:var(--panel);border:1px solid var(--card-border);border-radius:var(--radius-lg);padding:var(--space-3) var(--space-4);box-shadow:var(--card-shadow)}
 .card h3{font-size:var(--font-title);color:var(--acc);margin-bottom:var(--space-2);font-weight:600;letter-spacing:-.01em}
@@ -125,7 +125,7 @@ a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--acc);outline-of
 <body>
 <header>
   <div style="display:flex;align-items:center;gap:var(--space-3)"><h1>App发布看板</h1><span class="muted" id="cfg"></span></div>
-  <div class=hdr-right><button class="secondary sm" id="themeBtn" onclick="toggleTheme()">深色</button><button class=secondary sm onclick=ld()>刷新</button><button class=secondary sm onclick=validateAll()>校验凭证</button></div>
+  <div class=hdr-right><span class="muted" id="fsInfo"></span><span class="muted" id="meInfo"></span><button class="secondary sm hide" id="logoutBtn" onclick="logout()">退出登录</button><button class="secondary sm" id="themeBtn" onclick="toggleTheme()">深色</button><button class=secondary sm onclick=ld()>刷新</button><button class=secondary sm onclick=validateAll()>校验凭证</button></div>
 </header>
 <div class=layout>
   <aside id=sb></aside>
@@ -139,7 +139,7 @@ a:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--acc);outline-of
     </div></div>
     <div class=scroll>
       <div id="sgSection" style="display:none"><div class="section-head"><h3 class="section-title">平台状态</h3><button class="secondary sm hide" id="shareBtn" onclick="shareStatus()"><svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>分享</button></div><div id="sg" class="status-grid"></div></div>
-      <div><div class="section-head"><h3 class="section-title">发布历史</h3><button class="secondary sm" onclick="showHistoryModal()">更多</button></div><div id="sh"><div class="muted">暂无发布记录</div></div></div>
+      <div><div class="section-head"><h3 class="section-title" id="histTitle">发布历史</h3><button class="secondary sm" id="histMoreBtn" onclick="showHistoryModal()">更多</button></div><div id="sh"><div class="muted">暂无发布记录</div></div></div>
       <div><h3 class="section-title" style="margin-bottom:var(--space-2)">日志</h3><div id="lg" class="result" role="log"><div>就绪</div></div></div>
     </div>
   </main>
@@ -150,7 +150,32 @@ var ST={apps:[],cats:[],cur:null,plt:[],POLL:null};
 function $(v){return document.getElementById(v)}
 function esc(s){return String(s==null?"":s).replace(/[&<>"']/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]})}
 function iconSvg(n){var P={check:'<polyline points="20 6 9 17 4 12"/>',cross:'<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',bolt:'<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',upload:'<line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/>',warn:'<path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',sun:'<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>',moon:'<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'};return '<svg class="icon-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(P[n]||"")+"</svg>"}
-function api(p,o){return fetch(p,o).then(function(r){return r.json().catch(function(){return{}})})}
+function api(p,o){return fetch(p,o).then(function(r){if(r.status===401)showLogin();return r.json().catch(function(){return{}})})}
+// ==== 登录/会话（board.json 配置 users 后开启；viewer 只读，admin 可发布） ====
+function showLogin(){if(document.getElementById("loginOverlay"))return;
+var h='<div class="overlay" id="loginOverlay"><div class="modal" style="text-align:center;--modal-min-w:360px">'
++'<h3 class="section-title" style="margin-bottom:var(--space-3)">登录看板</h3>'
++'<div style="text-align:left"><label for="lgUser">用户名</label><input id="lgUser" autocomplete="username"></div>'
++'<div style="text-align:left;margin-top:var(--space-2)"><label for="lgPass">密码</label><input id="lgPass" type="password" autocomplete="current-password"></div>'
++'<div id="lgErr" style="color:var(--err);font-size:var(--font-caption);min-height:18px;margin-top:var(--space-2)"></div>'
++'<button id="lgBtn" onclick="doLogin()" style="width:100%">登 录</button>'
++'<div class="muted" style="margin-top:var(--space-2)">账号在 config/board.json 里配置（admin 可发布，viewer 只读）</div></div></div>';
+var d=document.createElement("div");d.innerHTML=h;document.body.appendChild(d.firstElementChild);
+var u=$("lgUser"),pw=$("lgPass");
+[u,pw].forEach(function(el){el.addEventListener("keydown",function(e){if(e.key==="Enter")doLogin()})});
+setTimeout(function(){u&&u.focus()},50)}
+function doLogin(){var u=$("lgUser"),pw=$("lgPass"),b=$("lgBtn"),err=$("lgErr");
+if(!u.value.trim()||!pw.value){err.textContent="请输入用户名和密码";return}
+b.disabled=true;err.textContent="";
+api("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u.value.trim(),password:pw.value})}).then(function(r){
+if(r&&r.ok){location.reload()}else{b.disabled=false;err.textContent=(r&&r.error)||"登录失败"}}).catch(function(){b.disabled=false;err.textContent="网络错误"}) }
+function logout(){api("/api/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"}).then(function(){location.reload()})}
+function isAdmin(){return !(ST.ME&&ST.ME.role==="viewer")}
+function renderMeBox(){var m=$("meInfo"),lo=$("logoutBtn"),fs=$("fsInfo");if(!m)return;
+var me=ST.ME||{};
+if(me.auth_enabled){m.textContent=(me.username||"?")+" · "+(me.role==="admin"?"管理员":"只读");lo.classList.remove("hide")}
+else{m.textContent="";lo.classList.add("hide")}
+if(fs){var f=ST.FS;if(f&&f.enabled){fs.textContent="飞书"+(f.connected?"已连接":(f.last_error?"异常":"连接中"))+(f.bound_chat?"":"·未绑通知群")}else fs.textContent=""}}
 function toast(m,t){var e=$("toast");e.style.display="flex";e.innerHTML='<div class="modal" style="width:auto;max-width:400px;text-align:center">'+esc(m)+'<div style="margin-top:12px"><button id=tb>确定</button></div></div>';e.style.background="transparent";clearTimeout(e._t);e._t=setTimeout(close,2600);var b=e.querySelector('#tb');if(b)b.addEventListener('click',close)}
 function close(){ $("toast").style.display="none" }
 function lg(t,c){var e=$("lg");if(e){var d=document.createElement("div");d.className=c||"";d.textContent=t;e.appendChild(d);e.scrollTop=e.scrollHeight}}
@@ -159,14 +184,15 @@ function setTheme(t){document.documentElement.dataset.theme=t;try{localStorage.s
 function toggleTheme(){setTheme(document.documentElement.dataset.theme==="dark"?"light":"dark")}
 setTheme(function(){try{return localStorage.getItem("dshTheme")||"light"}catch(e){return "light"}}());
 function stat(ch){var m={published:"已上架",reviewing:"审核中",pending:"待发布",draft:"草稿",submitted:"已提交",rejected:"已拒绝",unknown:"未知"};return m[ch]||ch}
-function ld(){Promise.all([api("/api/apps"),api("/api/platforms"),api("/api/config"),api("/api/tasks")]).then(function(rs){ST.apps=rs[0].apps||[];ST.cats=rs[0].categories||[];ST.platforms=rs[1]||[];$("cfg").textContent="凭证: "+(rs[2].credentials||"");renderSb();if(ST.apps.length){if(!ST.cur||!ST.apps.find(function(a){return a.id===ST.cur.id}))sa(ST.apps[0].id);else renderMain()}var hist=(rs[3]&&rs[3].history)||[];ST.HIST=hist;renderHistory(hist.slice(0,5))}).catch(function(e){console.error(e)})}
+function ld(){Promise.all([api("/api/apps"),api("/api/platforms"),api("/api/config"),api("/api/tasks"),api("/api/session")]).then(function(rs){ST.apps=rs[0].apps||[];ST.cats=rs[0].categories||[];ST.platforms=rs[1]||[];$("cfg").textContent="凭证: "+(rs[2].credentials||"");ST.FS=(rs[2]&&rs[2].feishu)||null;ST.ME={username:rs[4]&&rs[4].username,role:rs[4]&&rs[4].role,auth_enabled:!!(rs[4]&&rs[4].auth_enabled)};renderMeBox();ST.HIST=(rs[3]&&rs[3].history)||[];renderSb();if(ST.apps.length){if(!ST.cur||!ST.apps.find(function(a){return a.id===ST.cur.id}))sa(ST.apps[0].id);else{renderMain();renderHistory(appHistory(5))}}}).catch(function(e){console.error(e)})}
 function renderSb(){var h="";(ST.cats||[]).forEach(function(c){h+='<div class=cat-title>'+esc(c.name)+"</div>";(ST.apps||[]).filter(function(a){return a.category===c.name}).forEach(function(a){var act=ST.cur&&ST.cur.id===a.id?"active":"";var dot=a.package_name?'<span class=dot style=background:var(--ok)></span>':'<span class=dot style=background:var(--warn)></span>';h+='<div class="app-item '+act+'" role="button" tabindex="0" aria-current="'+(act?"true":"false")+'" data-id="'+esc(a.id)+'" onclick="sa(this.dataset.id)">'+dot+'<span>'+esc(a.name)+"</span></div>"})});$("sb").innerHTML=h}
-function sa(id){ST.cur=(ST.apps||[]).find(function(a){return a.id===id})||null;ST.statuses=null;ST.GB=null;ST.GBSEL=null;var _sb=$("shareBtn");if(_sb)_sb.classList.add("hide");var _sg=$("sg");if(_sg)_sg.innerHTML="";var _ss=$("sgSection");if(_ss)_ss.style.display="none";renderSb();renderMain()}
+function sa(id){ST.cur=(ST.apps||[]).find(function(a){return a.id===id})||null;ST.statuses=null;ST.GB=null;ST.GBSEL=null;var _sb=$("shareBtn");if(_sb)_sb.classList.add("hide");var _sg=$("sg");if(_sg)_sg.innerHTML="";var _ss=$("sgSection");if(_ss)_ss.style.display="none";renderSb();renderMain();renderHistory(appHistory(5))}
 function renderMain(){if(!ST.platforms&&!ST.apps.length){setTimeout(renderMain,250);return}var a=ST.cur;if(!a){$("appc").innerHTML='<div class=muted>请选择左侧应用</div>';return}
 var h='<div class=app-head><h2>'+esc(a.name)+'</h2>'+(a.category_display?'<span class=badge>'+esc(a.category_display)+'</span>':'')+(a.package_name?'<span class="badge" style=color:var(--ok)>'+esc(a.package_name)+'</span>':'<span class="badge err">未配包名</span>')+"</div>";
-h+='<div class=grid><div class=card><h3>构建产物</h3>'+
-'<div class=input-row><input id=paab value="" placeholder="AAB (Google Play)"><button class=sm secondary onclick=selBuild("aab")>选择…</button></div>'+
-'<div class=input-row><input id=papk value="" placeholder="APK (国内平台)"><button class=sm secondary onclick=selBuild("apk")>选择…</button></div>'+
+var admin=isAdmin();
+h+='<div class=grid><div class=card><h3>构建产物'+(admin?'':' <span class="muted" style="font-size:var(--font-caption)">（只读账号）</span>')+'</h3>'+
+'<div class=input-row><input id=paab value="" placeholder="AAB (Google Play)" '+(admin?'':'disabled')+'><button class=sm secondary onclick=selBuild("aab") '+(admin?'':'disabled title="只读账号不可上传"')+'>选择…</button></div>'+
+'<div class=input-row><input id=papk value="" placeholder="APK (国内平台)" '+(admin?'':'disabled')+'><button class=sm secondary onclick=selBuild("apk") '+(admin?'':'disabled title="只读账号不可上传"')+'>选择…</button></div>'+
 '<div id="papkAlert" style="font-size:var(--font-caption);margin:var(--space-1) 0;min-height:16px"></div>'+
 '<div style="margin-top:var(--space-3);border-top:1px solid var(--hairline);padding-top:var(--space-3)"><div class="eyebrow" style="margin-bottom:var(--space-2)">应用信息</div>'+
 '<div class=row><span class=k>包名</span><span class=v>'+esc(a.package_name||"未填")+'</span></div>'+
@@ -179,7 +205,7 @@ h+='<div class=card><h3>发布</h3>'+
 '<div><label for="ipv">轨道（Google）</label><select id="ipv"><option>production</option><option>beta</option><option>alpha</option><option>internal</option></select></div>'+
 '<div><label for="ipn">更新说明</label><textarea id="ipn" rows="2"></textarea><div class="form-group"><label for="pot">定时上线（留空=立即）</label><input id="pot" type="datetime-local"></div></div>'+
 '<div class=check><input type=checkbox id=ipdry checked><label for=ipdry>仅校验（不送审）</label> <input type="checkbox" id="ipauto" checked style="margin-left:var(--space-3)"><label for=ipauto>Google 自动送审</label></div>'+
-'<div class=actions>'+(a.query_only?'<button class=secondary disabled title="仅查询应用不支持发布">发布于 AGC 控制台</button>':'<button onclick=dpub()>发布</button>')+'</div></div>'+
+'<div class=actions>'+(a.query_only?'<button class=secondary disabled title="仅查询应用不支持发布">发布于 AGC 控制台</button>':(admin?'<button onclick=dpub()>发布</button>':'<button disabled title="只读账号（viewer）不可发布，需 admin 登录">发布（只读账号不可用）</button>'))+'</div></div>'+
 '<div class="card"><h3>平台状态</h3>'+
 '<div><label>查询平台（可多选）</label><div id="spp" style="display:flex;flex-wrap:wrap;gap:var(--space-2)">'+statusPlatsHTML()+'</div></div>'+
 '<div class="row-between" style="margin-top:var(--space-2)"><span><button type="button" class="sm secondary" onclick="statusPlatAll(1)">全选</button> <button type="button" class="sm secondary" onclick="statusPlatAll(0)">清空</button></span><button onclick="ds()">查询状态</button></div></div>'+
@@ -230,7 +256,7 @@ var ab_in=$("paab").value.trim(),ap_in=$("papk").value.trim();
 var body={app_id:a.id,platform:selPlats(),dry_run:$("ipdry").checked,auto_review:$("ipauto").checked,version_name:$("ipvn").value.trim(),version_code:parseInt($("ipvc").value)||null,release_notes:$("ipn").value.trim(),track:$("ipv").value,aab_path:(ab_in||a.aab_build||""),apk_path:(ap_in||a.apk_build||""),online_time:document.getElementById("pot")?document.getElementById("pot").value.trim():""};
 lg("== "+(body.dry_run?"Dry-run":"正式")+"发布 "+(a.name||a.id)+" ==");busy(true);api("/api/publish",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}).then(function(r){if(r.task_id){lg("任务: "+r.task_id);startPoll(r.task_id)}else{lg("启动失败: "+JSON.stringify(r),"err");busy(false)}})}
 function renderTask(t){ST.LASTT=t;
-var stopBtn=$("tstop");if(stopBtn)stopBtn.style.display=(t.status==="running")?"":"none";
+var stopBtn=$("tstop");if(stopBtn)stopBtn.style.display=((t.status==="running")&&isAdmin())?"":"none";
 var a=(ST.apps||[]).find(function(z){return z.id===t.app_id})||{};
 $("tinfo").innerHTML=esc(a.name||t.app_id)+" → "+esc(t.platform)+(t.dry_run?" "+iconSvg("bolt")+"dry-run":"");
 // === 平台芯片：点击切换查看对应平台详情（选中加阴影边框）；✓完成/✗失败/⚡进行中 ===
@@ -298,7 +324,7 @@ lg("== "+(stopped?"✓ 发布已停止":(isOk?"✓ 发布成功":"✗ 发布有�
 (t.results||[]).forEach(function(v){lg("["+v.platform+"] "+(v.ok?"✓ ":"✗ ")+v.message,v.ok?"ok":"err")});
 (t.errors||[]).forEach(function(v){lg("["+v.platform+"] 错误:"+v.error,"err")});
 // 任务结束：刷新发布历史显示（后端已落盘，此处重新拉取展示）
-api("/api/tasks").then(function(tr){ST.HIST=(tr&&tr.history)||[];renderHistory(ST.HIST.slice(0,5))});
+api("/api/tasks").then(function(tr){ST.HIST=(tr&&tr.history)||[];renderHistory(appHistory(5))});
 busy(false)}
 else{$("tclose").style.display="none";setTimeout(poll,600)}}).catch(function(){setTimeout(poll,1500)})}
 function stopPoll(){ST.POLL=null;$("tclose").style.display="none";var sb=$("tstop");if(sb)sb.style.display="none";$("progress").classList.add("hide")}
@@ -321,7 +347,7 @@ var live=liveArr.length?liveArr.join("<br>"):"-";
 var rev=(x.reviewing_version_names||[]).join(", ");var draft=(x.draft_version_names||[]).join(", ");var beta=(x.beta_version_names||[]).join(", ");var alpha=(x.alpha_version_names||[]).join(", ");var inter=(x.internal_version_names||[]).join(", ");var tst=[];if(beta)tst.push("Beta:"+beta);if(alpha)tst.push("Alpha:"+alpha);if(inter)tst.push("内测:"+inter);var tstRow=tst.join(" ；");
 var note=(x.audit_note||"").trim();
 var revText=note?esc(note):(rev?esc(rev):(x.state==="reviewing"?"审核中":"-"));
-h+='<div class="card"><div class="section-head"><b style="font-size:var(--font-caption)">'+esc(nm[x.platform]||x.platform)+'</b><span style="display:flex;gap:var(--space-2);align-items:center">'+((x.platform==="huawei"&&x.state==="pending")?'<button class=mini-btn onclick="confirmReleaseNow()">立即上线</button>':"")+'<span class="state '+x.state+'">'+stat(x.state)+'</span></span></div>'+row("已上架版本",'<span class=v style="white-space:pre-line">'+live+'</span>')+row("审核状态",revText)+row("草稿未送审",draft?esc(draft):"-")+(tstRow?row("内测版本",esc(tstRow)):"")+'</div>'});
+h+='<div class="card"><div class="section-head"><b style="font-size:var(--font-caption)">'+esc(nm[x.platform]||x.platform)+'</b><span style="display:flex;gap:var(--space-2);align-items:center">'+((x.platform==="huawei"&&x.state==="pending"&&isAdmin())?'<button class=mini-btn onclick="confirmReleaseNow()">立即上线</button>':"")+'<span class="state '+x.state+'">'+stat(x.state)+'</span></span></div>'+row("已上架版本",'<span class=v style="white-space:pre-line">'+live+'</span>')+row("审核状态",revText)+row("草稿未送审",draft?esc(draft):"-")+(tstRow?row("内测版本",esc(tstRow)):"")+'</div>'});
 e.innerHTML=h}
 function shareStatus(){
 var list=ST.statuses||[],a=ST.cur;
@@ -390,19 +416,25 @@ navigator.clipboard.write([new ClipboardItem({"image/png":blob})]).then(okToast,
 lg("已生成分享图片（"+rows.length+" 个平台）","ok")}
 function historyRecordVersion(t){if(t.version_name)return t.version_name;var m=((t.steps||[]).join(" ").match(/ v(\d+(?:\.\d+)+)/));return m?m[1]:""}
 var PLATFORM_NAMES={huawei:"华为",oppo:"OPPO",vivo:"VIVO",xiaomi:"小米",honor:"荣耀",google:"Google Play",apple:"Apple",qq:"应用宝"}
+// ==== 发布历史：按当前选中应用过滤（弹窗里可切「全部应用」） ====
+function appName(id){var a=(ST.apps||[]).find(function(x){return x.id===id});return (a&&a.name)||id}
+function appHistory(limit){var cur=ST.cur;var h=(ST.HIST||[]).filter(function(t){return !cur||t.app_id===cur.id});return limit?h.slice(0,limit):h}
 function historyRowsHTML(hist){var h="";(hist||[]).forEach(function(t){var isOk=t.status==="done"&&!(t.errors||[]).length&&!(t.results||[]).some(function(v){return !v.ok});var st=t.status==="killed"?"killed":(isOk?"ok":"err");var dn=(t.dry_run?" (dry-run)":"");var v=historyRecordVersion(t);var failed=(t.errors||[]).map(function(e){return e.platform}).concat((t.results||[]).filter(function(v){return !v.ok}).map(function(v){return v.platform})).filter(function(p,i,a){return p&&a.indexOf(p)===i});var failLabel=t.status==="killed"?"未完成平台：":"失败平台：";var failLine=failed.length?'<div style="font-size:var(--font-label);color:var(--err);margin-top:var(--space-1)">'+failLabel+esc(failed.map(function(p){return PLATFORM_NAMES[p]||p}).join("、"))+'</div>':"";
 // 手动停止的任务：同时列出已完成平台（绿色）——停止前已完成的平台是真的完成了（真实发布会已提交到商店），
 // 只列未完成会让人误以为全部都没跑
 var okPlats=(t.results||[]).filter(function(v){return v.ok}).map(function(v){return v.platform}).filter(function(p,i,a){return p&&a.indexOf(p)===i});
 var doneLine=(t.status==="killed"&&okPlats.length)?'<div style="font-size:var(--font-label);color:var(--ok);margin-top:var(--space-1)">已完成平台：'+esc(okPlats.map(function(p){return PLATFORM_NAMES[p]||p}).join("、"))+'</div>':"";h+='<div class="card dense"><div class="row-between"><span style="font-size:var(--font-caption)">'+esc(t.finished_at||"")+' · <b>'+esc(t.app_id)+'</b> → '+esc(t.platform||"")+(v?" v"+esc(v):"")+dn+'</span><span class="state '+st+'">'+(t.status==="killed"?"已停止":(isOk?"完成":"失败"))+'</span></div><div style="font-size:var(--font-label);color:var(--mut);margin-top:var(--space-1)">'+esc(t.stage||"")+'</div>'+doneLine+failLine+"</div>"});return h}
-function renderHistory(hist){var e=document.getElementById("sh");if(!e)return;if(!hist||!hist.length){e.innerHTML='<div class=muted>暂无发布记录</div>';return}e.innerHTML=historyRowsHTML(hist)}
-function showHistoryModal(){ST.HISTPAGE=1;renderHistoryModal()}
-function renderHistoryModal(){var hist=ST.HIST||[];var per=10;var total=Math.max(1,Math.ceil(hist.length/per));var pg=Math.min(Math.max(1,ST.HISTPAGE||1),total);ST.HISTPAGE=pg;var rows=hist.slice((pg-1)*per,pg*per);
+function renderHistory(hist){var e=document.getElementById("sh");var t=$("histTitle");if(t)t.textContent=ST.cur?("发布历史 · "+(ST.cur.name||ST.cur.id)):"发布历史";var more=document.getElementById("histMoreBtn");if(more)more.style.display=(appHistory().length>5)?"":"none";if(!e)return;if(!hist||!hist.length){e.innerHTML='<div class=muted>暂无发布记录</div>';return}e.innerHTML=historyRowsHTML(hist)}
+function showHistoryModal(){ST.HISTPAGE=1;ST.HISTALL=false;renderHistoryModal()}
+function renderHistoryModal(){var hist=ST.HISTALL?(ST.HIST||[]):appHistory();var per=10;var total=Math.max(1,Math.ceil(hist.length/per));var pg=Math.min(Math.max(1,ST.HISTPAGE||1),total);ST.HISTPAGE=pg;var rows=hist.slice((pg-1)*per,pg*per);
+var title=ST.HISTALL?"发布历史（全部应用）":("发布历史 · "+((ST.cur&&(ST.cur.name||ST.cur.id))||"当前应用"));
+var toggleBtn=ST.HISTALL?'<button class="secondary sm" onclick="histScopeToggle()">只看本应用</button>':'<button class="secondary sm" onclick="histScopeToggle()">看全部应用</button>';
 var h='<div class="overlay" onclick="if(event.target===this)clh()"><div class="modal" style="--modal-min-w:560px;max-width:760px;max-height:80vh;display:flex;flex-direction:column">'
-+'<div class="section-head"><b class="section-title">发布历史（全部）</b><button class="secondary sm" onclick="clh()">×</button></div>'
++'<div class="section-head"><b class="section-title">'+esc(title)+'</b><span style="display:flex;gap:var(--space-2)">'+toggleBtn+'<button class="secondary sm" onclick="clh()">×</button></span></div>'
 +'<div class="modal-body">'+(rows.length?historyRowsHTML(rows):'<div class="muted">暂无发布记录</div>')+'</div>'
 +'<div class="row-between" style="margin-top:var(--space-2);font-size:var(--font-caption);color:var(--mut)"><span>共 '+hist.length+' 条 · 第 '+pg+' / '+total+' 页</span><span><button class="secondary sm" '+(pg<=1?"disabled ":"")+'onclick=histPage(-1)>上一页</button> <button class="secondary sm" '+(pg>=total?"disabled ":"")+'onclick=histPage(1)>下一页</button></span></div></div></div>';
 clh();var d=document.createElement("div");d.innerHTML=h;document.body.appendChild(d.firstElementChild)}
+function histScopeToggle(){ST.HISTALL=!ST.HISTALL;ST.HISTPAGE=1;renderHistoryModal()}
 function histPage(d){ST.HISTPAGE=Math.max(1,(ST.HISTPAGE||1)+d);renderHistoryModal()}
 function clh(){document.querySelectorAll(".overlay").forEach(function(e){if(e.id!=="toast")e.remove()})}
 // ==== Google Play 签名 APK 下载（覆盖安装测试用）====

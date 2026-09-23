@@ -18,11 +18,14 @@
 - **自动复用资料**：OPPO 更新版本时自动沿用现网图标/简介/截图，无需重传
 - **三态查询**：Google Play 区分「已上架 / 草稿未送审 / 审核中」
 - **状态看板**：Web 界面直观展示每个 App 在各平台的已上架版本，支持深色/浅色主题一键切换（自动记忆选择）；一键生成竖版「发布状态分享图」（自动带应用图标）并复制到剪贴板，可直接粘贴到微信/钉钉
+- **登录与权限**：`config/board.json` 配置账号后开启登录，admin 可发布 / viewer 只读+查询；局域网共享看板时按角色分配权限（[Web 看板手册](docs/WEB_GUIDE.md)）
+- **局域网访问**：`./start-dashboard.sh lan` 一键开放给同网段同事（强制先配好登录账号；不配账号拒绝启动）
+- **飞书群机器人**：发布完成自动往群里发结果卡片 + 状态分享图；群成员 @机器人 即可查任一应用各平台状态（回复分享图）。自建应用 + 长连接，无需公网 IP（接入步骤见 [Web 看板手册](docs/WEB_GUIDE.md)）
 - **dry-run 安全校验**：不真实提交。注意行为差异：Google 会真实创建 edit 后立即删除、应用宝会调只读接口查线上版本，其余平台纯本地校验（见 [架构说明](docs/ARCHITECTURE.md)）
 
 ## 平台能力一览
 
-| 平台 | 查询 | 发布 | 定时上线 | 审核通过后立即上线 | 备注 |
+| 平台 | 查询 | 发布 | 定时上线 | 定时/手动修改立即上线 | 备注 |
 | --- | --- | --- | --- | --- | --- |
 | Google Play | ✅ 三态 | ✅ | ❌ | ❌ | 发布需 **AAB**（APK 已不被接受）；可自动送审（勾选「Google 自动送审」）或存草稿后手动送审 |
 | Apple App Store | ✅ 版本 | ⚠️ 实验性 | — | — | 查询走 iTunes Lookup 公开接口；`publish()` 已实现（App Store Connect 提交审核）但**未经真实发布实测**，谨慎使用 |
@@ -39,7 +42,10 @@
 .
 ├── app_store/
 │   ├── cli.py            # 命令行入口（publish/status/web...）
-│   ├── web.py            # Web 看板服务器（stdlib http.server）
+│   ├── web.py            # Web 看板服务器（stdlib http.server + 登录鉴权）
+│   ├── board_config.py   # 看板配置（登录账号/角色 + 飞书机器人）
+│   ├── share_image.py    # 状态分享图服务端渲染（Pillow）
+│   ├── feishu_bot.py     # 飞书机器人（发布通知 + @查询，长连接）
 │   ├── base.py           # StoreAdapter 抽象基类
 │   ├── registry.py       # 平台 -> 适配器注册表
 │   ├── config.py         # 凭证 / 应用目录加载
@@ -51,7 +57,7 @@
 │       ├── google.py / apple.py / xiaomi.py
 │       ├── oppo.py / vivo.py / honor.py / huawei.py
 ├── apps/catalog.json     # 应用目录（包名、构建产物路径、版本）
-├── config/               # 凭证（credentials.json 本地私有）
+├── config/               # 凭证 credentials.json + 看板配置 board.json（均本地私有）
 └── docs/                 # 文档
 ```
 
@@ -64,7 +70,7 @@ cd /path/to/app 上架及查询
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-# 依赖：requests、pycryptodome、cryptography（小米签名）、google-api-python-client（Google，可选）
+# 依赖：requests、pycryptodome、cryptography（小米签名）、Pillow+lark-oapi（飞书机器人/分享图）、google-api-python-client（Google，可选）
 pip install -e .        # 安装 appstore 命令（本文档所有 appstore ... 命令都依赖这步）
 ```
 
@@ -115,12 +121,19 @@ appstore apps                               # 查看应用目录
 
 ```bash
 appstore web --port 8090 --credentials config/credentials.json --catalog apps/catalog.json
+# 或一键脚本：./start-dashboard.sh（bg=后台 / lan=局域网模式 / stop / status）
 # 打开 http://127.0.0.1:8090
 ```
 
-> ⚠️ **安全提示**：看板**没有任何登录鉴权**，任何能访问该端口的人都可以执行发布、上传安装包、查询/修改操作。
-> 请务必保持默认的 `--host 127.0.0.1`（仅本机访问）；如需局域网/公网访问，不要直接绑 `0.0.0.0`，
-> 应通过反向代理（Nginx 等）加访问鉴权后再暴露。
+> ⚠️ **安全提示**：默认**无登录、仅本机 127.0.0.1 访问**（零配置可用，行为与旧版一致）。
+> 需要给同事用或远程访问时：复制 `config/example.board.json` 为 `config/board.json` 配置账号
+> （admin 可发布 / viewer 只读+查询），再 `./start-dashboard.sh lan` 开放局域网——
+> **没配账号时局域网模式会拒绝启动**。不要把端口直接映射到公网（要走 VPN 或 HTTPS 反代，详见
+> [Web 看板手册](docs/WEB_GUIDE.md)）。
+>
+> 🤖 **飞书群机器人**（可选）：board.json 的 feishu 段填入自建应用凭证后，发布完成自动在群里
+> 发结果卡片+状态分享图，群成员 @机器人 即可查询任一应用状态。创建与配置步骤见
+> [Web 看板手册](docs/WEB_GUIDE.md)。
 
 看板上可：查看每个应用各平台已上架版本 / 选择平台一键发布 / 填版本号与更新说明 / 定时上线。
 
@@ -157,8 +170,9 @@ appstore --json status --app example-app --credentials config/credentials.json
 ## 安全提醒
 
 - 凭证（client_secret / 服务账号私钥 / 签名密钥）只保存在 `config/credentials.json`（已在 .gitignore），**切勿提交到仓库**
-- `config/example.credentials.json` 用占位符，供脚手架使用
+- 看板登录账号与飞书应用凭证保存在 `config/board.json`（同样已 gitignore；模板 `config/example.board.json`）
 - 发布会真实消耗平台配额并触发审核，请先 `--dry-run` 验证
+- 局域网开放看板必须先配置登录账号（脚本与服务端双重强制）；不要把端口直接映射公网
 - 上架最终结果以平台后台为准
 
 ## 详细文档

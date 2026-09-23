@@ -135,15 +135,16 @@ appstore --json status --app example-app
 ```bash
 appstore web [--port PORT] [--host HOST]
              [--credentials CREDENTIALS] [--catalog CATALOG]
-             [--open]
+             [--board-config BOARD_CONFIG] [--open]
 ```
 
 | 参数 | 说明 |
 | --- | --- |
 | `--port` | 监听端口（默认 8090） |
-| `--host` | 监听地址（默认 127.0.0.1）。**看板无鉴权**，绑 `0.0.0.0` 会让网内任何人都能发布/上传/改配置，公网暴露请走反向代理加鉴权 |
+| `--host` | 监听地址（默认 127.0.0.1）。绑 `0.0.0.0`（局域网）**必须先在 board.json 配置登录账号**，否则拒绝启动；公网暴露请走 VPN/HTTPS 反代 |
 | `--credentials` | 凭证路径 |
 | `--catalog` | 应用目录路径 |
+| `--board-config` | 看板配置（登录账号/角色 + 飞书机器人，默认 config/board.json；文件不存在 = 无鉴权本机模式） |
 | `--open` | 自动打开浏览器 |
 
 **示例**
@@ -151,4 +152,8 @@ appstore web [--port PORT] [--host HOST]
 ```bash
 appstore web --port 8090 --credentials config/credentials.json --catalog apps/catalog.json
 # → http://127.0.0.1:8090
+
+# 局域网模式（需先配置 config/board.json 的 users）
+appstore web --host 0.0.0.0 --port 8090 --board-config config/board.json
+# 或直接用一键脚本：./start-dashboard.sh lan / lanbg
 ```

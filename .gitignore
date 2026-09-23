@@ -56,3 +56,10 @@ docs/UI审计报告.md
 
 # 本地临时文档（AI 生成分析/清单等，不入库）
 tmpdoc/
+
+# 看板登录账号+飞书机器人配置（本地私有，模板 example.board.json）
+config/board.json
+!config/example.board.json
+
+# 登录/操作审计日志（本地私有）
+config/login_log.jsonl

@@ -1,0 +1,32 @@
+{
+  "_说明": "看板自身配置模板。复制为 config/board.json（已 gitignore）后按需修改；文件不存在 = 登录鉴权与飞书机器人均关闭（本机直连模式）。",
+  "users": [
+    {
+      "username": "laijunbin",
+      "password": "改成你的密码",
+      "role": "admin",
+      "_role说明": "admin=可发布/上传/停止任务；viewer=只读+查询状态（给同事用）"
+    },
+    {
+      "username": "colleague",
+      "password": "改成同事的密码",
+      "role": "viewer"
+    }
+  ],
+  "session_days": 14,
+  "_feishu说明": "飞书自建应用机器人（创建步骤见 docs/WEB_GUIDE.md）。app_id/app_secret 在开放平台「凭证与基础信息」页；notify_chat_id 可以不填，改为在群里 @机器人 发送「绑定通知群」自动写入。",
+  "feishu": {
+    "app_id": "cli_xxxxxxxxxxxxxxxx",
+    "app_secret": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "notify_chat_id": "",
+    "notify_on_publish": true,
+    "notify_on": {
+      "_说明": "按发布结果场景控制群通知；默认只在「勾选平台全部提审成功」时通知（Google 需勾「自动送审」且提交成功才算送审）。以后要开哪种改成 true 重启看板即可。",
+      "all_success": true,
+      "partial_success": false,
+      "failed": false,
+      "killed": false,
+      "draft_only": false
+    }
+  }
+}

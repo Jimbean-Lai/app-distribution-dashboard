@@ -336,10 +336,11 @@ def build_parser() -> argparse.ArgumentParser:
     pl.set_defaults(func=cmd_platforms)
 
     web = sub.add_parser("web", help="启动 Web 可视化看板")
-    web.add_argument("--host", default="127.0.0.1", help="监听地址（默认 127.0.0.1）")
+    web.add_argument("--host", default="127.0.0.1", help="监听地址（默认 127.0.0.1；局域网用 0.0.0.0，须先配置登录账号）")
     web.add_argument("--port", type=int, default=8090, help="监听端口（默认 8090）")
     web.add_argument("--credentials", default=DEFAULT_CREDENTIALS, help="凭证 JSON 文件路径")
     web.add_argument("--catalog", default=argparse.SUPPRESS, help="应用目录 JSON 路径（覆盖全局 --catalog）")
+    web.add_argument("--board-config", default="config/board.json", help="看板配置 JSON（登录账号+飞书机器人，默认 config/board.json）")
     web.add_argument("--open", action="store_true", help="启动后自动打开浏览器")
     web.set_defaults(func=cmd_web)
 
@@ -350,7 +351,9 @@ def cmd_web(args: argparse.Namespace) -> int:
     """Web 看板入口（延迟导入避免额外依赖）。"""
     from .web import run_server
 
-    return run_server(host=args.host, port=args.port, credentials_path=args.credentials, catalog_path=args.catalog, open_browser=args.open)
+    return run_server(host=args.host, port=args.port, credentials_path=args.credentials,
+                      catalog_path=args.catalog, open_browser=args.open,
+                      board_config_path=args.board_config)
 
 
 def main(argv: Optional[List[str]] = None) -> int:
