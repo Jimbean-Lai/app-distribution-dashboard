@@ -335,12 +335,30 @@ class GoogleAdapter(StoreAdapter):
                 time.sleep(_PROCESSING_POLL_SECONDS)
                 waited += _PROCESSING_POLL_SECONDS
 
+    @staticmethod
+    def _explain_error(e: Exception) -> str:
+        """把 Google API 异常归类成人话提示：网络超时 / 账号权限 / 包名。
+
+        网络类（socket 超时 Errno 60、连接被重置、DNS 失败等都是 OSError 子类）
+        与权限/包名无关，国内访问 Google 需 VPN/代理，分开提示才不会误导排查方向。
+        """
+        if isinstance(e, OSError):
+            return "网络连接失败，国内访问 Google 需 VPN/代理"
+        status = getattr(e, "status_code", None)
+        if status is None:
+            status = getattr(getattr(e, "resp", None), "status", None)
+        if status == 403:
+            return "服务账号无权访问该应用，请到 Play Console 检查权限"
+        if status == 404:
+            return "包名不存在或账号无权访问"
+        return "可能是包名/服务账号权限问题"
+
     def query_status(self, package_name: str) -> StoreStatus:
         service = self._service(package_name)
         try:
             edit = service.edits().insert(body={}, packageName=package_name).execute()
         except Exception as e:
-            raise StoreError(f"Google Play 查询失败（可能是包名/权限问题）: {e}")
+            raise StoreError(f"Google Play 查询失败（{self._explain_error(e)}）: {e}")
         edit_id = edit["id"]
         try:
             resp = (
@@ -481,7 +499,7 @@ class GoogleAdapter(StoreAdapter):
         try:
             edit = service.edits().insert(body={}, packageName=package_name).execute()
         except Exception as e:
-            raise StoreError(f"Google Play 拉取版本失败（可能是包名/服务账号权限问题）: {e}")
+            raise StoreError(f"Google Play 拉取版本失败（{self._explain_error(e)}）: {e}")
         edit_id = edit["id"]
         try:
             try:
