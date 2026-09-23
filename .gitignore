@@ -63,3 +63,6 @@ config/board.json
 
 # 登录/操作审计日志（本地私有）
 config/login_log.jsonl
+
+# 各平台官方 API 文档存档（本地参考用，不入库）
+docs/*_api_guide.txt
